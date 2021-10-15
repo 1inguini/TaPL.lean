@@ -1,0 +1,4 @@
+* TaPL.lean
+Implementing and learning [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers/arith.tar.gz][/Types and Programming Languages/]] in [[https://github.com/leanprover-community/lean][Lean 3]]
+
+This code does not have one-to-one correspondence to the [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers][original implentation]]

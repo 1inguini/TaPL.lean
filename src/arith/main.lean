@@ -1,8 +1,8 @@
 import system.io
-import data.buffer, data.buffer.parser
+import data.buffer
+import data.buffer.parser
 
 namespace arith
-
 
   namespace parser
 

@@ -6,7 +6,11 @@ namespace arith
 
   namespace ast
 
-    structure info := (index : nat)
+    structure info : Type := (pos : ℕ)
+
+
+    instance : has_repr info :=
+      ⟨λinfo, "{ pos := " ++ repr info.pos ++ " }"⟩
 
     inductive term : Type
     | true : info → term
@@ -17,11 +21,40 @@ namespace arith
     | succ : info → term → term
     | pred : info → term → term
 
+    protected def term.repr : term → string
+    | (term.true info) := "(true " ++ repr info ++ ")"
+    | (term.false info) := "(false " ++ repr info ++ ")"
+    | (term.if_then_else info t₀ t₁ t₂) :=
+        "(if " ++ term.repr t₀
+        ++ " then " ++ term.repr t₁
+        ++ " else " ++ term.repr t₂
+        ++ ")"
+    | (term.is_zero info t) := "(is_zero " ++ repr info ++ " " ++ term.repr t ++ ")"
+    | (term.zero info) := "(zero " ++ repr info ++ ")"
+    | (term.succ info t) := "(succ " ++ repr info ++ " " ++ term.repr t ++ ")"
+    | (term.pred info t) := "(pred " ++ repr info ++ " " ++ term.repr t ++ ")"
+
+    instance : has_repr term := ⟨term.repr⟩
+
+    protected def term.to_string : term → string
+    | (term.true _) := "true"
+    | (term.false _) := "false"
+    | (term.if_then_else _ t₀ t₁ t₂) :=
+        "if " ++ term.to_string t₀
+        ++ "then " ++ term.to_string t₁
+        ++ "else " ++ term.to_string t₂
+    | (term.is_zero _ t) := "is_zero " ++ term.to_string t
+    | (term.zero _) := "0"
+    | (term.succ _ t) := "succ " ++ term.to_string t
+    | (term.pred _ t) := "pred " ++ term.to_string t
+
+    instance : has_to_string term := ⟨term.to_string⟩
+
   end ast
 
   namespace parser
-    def print_test {α : Type} [has_to_string α]: (string ⊕ α) → io unit
-    | (sum.inr ok) := io.print ok
+    def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
+    | (sum.inr ok) := io.put_str_ln $ repr ok
     | (sum.inl err) := io.put_str_ln err
 
     def between (opening : parser unit) (closing : parser unit) {a : Type} (inside : parser a)
@@ -103,7 +136,30 @@ namespace arith
 
     end bracket
 
-    #eval print_test $ parser.run_string spaces " /* /* hello */ */ "
+    namespace term
+       protected def info : parser ast.info := λ(input : char_buffer) (pos : ℕ),
+         parse_result.done pos { pos := pos }
+
+       protected def const (mk : ast.info → ast.term) : parser ast.term := do
+         term <- mk <$> term.info,
+         symbol $ to_string term,
+         pure term
+
+      def true : parser ast.term := term.const ast.term.true
+      def false : parser ast.term := term.const ast.term.false
+      def zero : parser ast.term := term.const ast.term.zero
+
+      def term : parser ast.term :=
+        ( true
+          <|> false
+          <|> zero
+        ) <* semicolon
+    end term
+
+    def toplevel : parser (list ast.term) :=
+      spaces *> parser.many term.term
+
+    #eval print_test $ parser.run_string toplevel "  true /* /* hello */ */ ;  0 ; "
 
   end parser
 

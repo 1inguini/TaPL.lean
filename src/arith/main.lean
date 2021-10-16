@@ -16,7 +16,7 @@ namespace arith
     | true : info → term
     | false : info → term
     | if_then_else : info → term → term → term → term
-    | is_zero : info → term → term
+    | iszero : info → term → term
     | zero : info → term
     | succ : info → term → term
     | pred : info → term → term
@@ -29,7 +29,7 @@ namespace arith
         ++ " then " ++ term.repr t₁
         ++ " else " ++ term.repr t₂
         ++ ")"
-    | (term.is_zero info t) := "(is_zero " ++ repr info ++ " " ++ term.repr t ++ ")"
+    | (term.iszero info t) := "(iszero " ++ repr info ++ " " ++ term.repr t ++ ")"
     | (term.zero info) := "(zero " ++ repr info ++ ")"
     | (term.succ info t) := "(succ " ++ repr info ++ " " ++ term.repr t ++ ")"
     | (term.pred info t) := "(pred " ++ repr info ++ " " ++ term.repr t ++ ")"
@@ -41,9 +41,9 @@ namespace arith
     | (term.false _) := "false"
     | (term.if_then_else _ t₀ t₁ t₂) :=
         "if " ++ term.to_string t₀
-        ++ "then " ++ term.to_string t₁
-        ++ "else " ++ term.to_string t₂
-    | (term.is_zero _ t) := "is_zero " ++ term.to_string t
+        ++ " then " ++ term.to_string t₁
+        ++ " else " ++ term.to_string t₂
+    | (term.iszero _ t) := "iszero " ++ term.to_string t
     | (term.zero _) := "0"
     | (term.succ _ t) := "succ " ++ term.to_string t
     | (term.pred _ t) := "pred " ++ term.to_string t
@@ -53,7 +53,7 @@ namespace arith
   end ast
 
   namespace parser
-    def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
+    protected def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
     | (sum.inr ok) := io.put_str_ln $ repr ok
     | (sum.inl err) := io.put_str_ln err
 
@@ -73,7 +73,8 @@ namespace arith
       in parser.str "/*" *> parser.fix recur_until_end
 
     -- 全角spaceとかについてはとりあえず考えない
-    def spaces : parser unit := parser.many' (comment <|> parser.str " ")
+    def spaces : parser unit := parser.many'
+      (comment <|> unit.star <$ parser.one_of [' ', '\n', '\t'])
 
     def lexeme {α : Type} : parser α → parser α := (<* spaces)
 
@@ -116,6 +117,9 @@ namespace arith
     end arrow
 
     namespace bracket
+      def paren {a : Type} : parser a → parser a :=
+        between (symbol "(") (symbol ")")
+
       def square {a : Type} : parser a → parser a :=
         between (symbol "[") (symbol "]")
 
@@ -137,35 +141,61 @@ namespace arith
     end bracket
 
     namespace term
-       protected def info : parser ast.info := λ(input : char_buffer) (pos : ℕ),
-         parse_result.done pos { pos := pos }
+      protected def info : parser ast.info := λ(input : char_buffer) (pos : ℕ),
+        parse_result.done pos { pos := pos }
 
-       protected def const (mk : ast.info → ast.term) : parser ast.term := do
-         term <- mk <$> term.info,
-         symbol $ to_string term,
-         pure term
-
+      -- Constant
+      protected def const (mk : ast.info → ast.term) : parser ast.term := do
+        term <- mk <$> term.info,
+        symbol $ to_string term,
+        pure term
       def true : parser ast.term := term.const ast.term.true
       def false : parser ast.term := term.const ast.term.false
       def zero : parser ast.term := term.const ast.term.zero
 
-      def term : parser ast.term :=
-        ( true
-          <|> false
-          <|> zero
-        ) <* semicolon
+      -- Unary
+      protected def unary
+        (symbol_def : string) (mk : ast.info → ast.term -> ast.term) (inside : parser ast.term)
+        : parser ast.term := do
+        info ← term.info,
+        symbol symbol_def,
+        mk info <$> inside
+      def succ : parser ast.term -> parser ast.term := term.unary "succ" ast.term.succ
+      def pred : parser ast.term -> parser ast.term := term.unary "pred" ast.term.pred
+      def iszero : parser ast.term -> parser ast.term := term.unary "iszero" ast.term.iszero
+
+      -- if-then-else
+      def if_then_else (inside : parser ast.term) : parser ast.term :=
+        ast.term.if_then_else
+        <$> term.info
+        <*> (symbol "if" *> inside)
+        <*> (symbol "then" *> inside)
+        <*> (symbol "else" *> inside)
+
+      def term : parser ast.term := parser.fix $ λterm,
+         true
+        <|> false
+        <|> if_then_else term
+        <|> zero
+        <|> succ term
+        <|> pred term
+        <|> iszero term
+        <|> bracket.paren term
+
     end term
 
     def toplevel : parser (list ast.term) :=
-      spaces *> parser.many term.term
-
-    #eval print_test $ parser.run_string toplevel "  true /* /* hello */ */ ;  0 ; "
+      spaces *> parser.many1 (term.term <* semicolon)
 
   end parser
 
-  def str : string := "hello fron arith"
-
 end arith
 
-def main : io unit :=
-  io.put_str_ln arith.str
+def main : io unit := do
+  test_str <- io.fs.read_file "test.f" ff,
+  io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
+  | (sum.inl err) := to_string err
+  | (sum.inr x) := to_string x
+  end
+
+

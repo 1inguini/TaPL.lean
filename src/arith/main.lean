@@ -20,7 +20,6 @@ namespace arith
   end ast
 
   namespace parser
-
     def word_import : parser unit := parser.str "import"
     def word_if : parser unit := parser.str "if"
     def word_then : parser unit := parser.str "then"
@@ -86,9 +85,10 @@ namespace arith
 
     def comment : parser unit :=
       let recur_until_end (until_end : parser unit) :=
-          parser.str "/*" *> until_end *> until_end
-          <|> parser.str "*/"
-          <|> (unit.star <$ parser.any_char) *> until_end
+          parser.str "*/"
+          <|> ( parser.str "/*" *> until_end
+                <|> unit.star <$ parser.any_char
+              ) *> until_end
       in parser.str "/*" *> parser.fix recur_until_end
 
     def print_test {α : Type} [has_to_string α]: (string ⊕ α) → io unit

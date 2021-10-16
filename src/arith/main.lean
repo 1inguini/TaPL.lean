@@ -8,6 +8,7 @@ namespace arith
 
     structure info : Type := (pos : ℕ)
 
+    def dummy_info : info := { pos := 0 }
 
     instance : has_repr info :=
       ⟨λinfo, "{ pos := " ++ repr info.pos ++ " }"⟩
@@ -189,6 +190,50 @@ namespace arith
 
   end parser
 
+  namespace eval
+    open ast
+
+    -- term may be already normal form before evaluation step
+    inductive result : Type
+    | already_normal : term → result
+    | evaluated : term → result
+
+    namespace small_step
+
+      -- I decided not to reject non-numeric term
+      def step : ast.term → result
+      | (term.if_then_else info (term.true _) t₁ _) := result.evaluated t₁ -- E-IfTrue
+      | (term.if_then_else info (term.false _) _ t₂) := result.evaluated t₂ -- E-IfFalse
+      | t@(term.if_then_else info t₀ t₁ t₂) :=
+          match step t₀ with
+          | (result.already_normal _) := result.already_normal t
+          | (result.evaluated t₀') := result.evaluated $ term.if_then_else info t₀' t₁ t₂ -- E-If
+          end
+      | t@(term.succ info t₀) :=
+          match step t₀ with
+          | (result.already_normal _) := result.already_normal t
+          | (result.evaluated t₀') := result.evaluated $ term.succ info t₀' -- E-Succ
+          end
+      | (term.pred info (term.zero _)) := result.evaluated $ term.zero info -- E-PredZero
+      | (term.pred info (term.succ _ t₀)) := result.evaluated $ term.zero info -- E-PredSucc
+      | t@(term.pred info t₀) :=
+          match step t₀ with
+          | (result.already_normal _) := result.already_normal t
+          | (result.evaluated t₀') := result.evaluated $ term.pred info t₀' -- E-Pred
+          end
+      | (term.iszero info (term.zero _)) := result.evaluated $ term.true info -- E-IsZeroZero
+      | (term.iszero info (term.succ _ _)) := result.evaluated $ term.false info -- E-IsZeroSucc
+      | t@(term.iszero info t₀) :=
+          match step t₀ with
+          | (result.already_normal _) := result.already_normal t
+          | (result.evaluated t₀') := result.evaluated $ term.iszero info t₀' -- E-IsZero
+          end
+      | t := result.already_normal t -- value is always a normal form
+
+    end small_step
+
+  end eval
+
 end arith
 
 def main : io unit := do
@@ -197,5 +242,4 @@ def main : io unit := do
   | (sum.inl err) := to_string err
   | (sum.inr x) := to_string x
   end
-
 

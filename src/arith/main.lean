@@ -20,40 +20,9 @@ namespace arith
   end ast
 
   namespace parser
-    def word_import : parser unit := parser.str "import"
-    def word_if : parser unit := parser.str "if"
-    def word_then : parser unit := parser.str "then"
-    def word_else : parser unit := parser.str "else"
-    def word_true : parser unit := parser.str "true"
-    def word_false  : parser unit := parser.str "false"
-    def word_succ : parser unit := parser.str "succ"
-    def word_pred : parser unit := parser.str "pred"
-    def word_iszero : parser unit := parser.str "iszero"
-
-    def underscore : parser unit := parser.ch '_'
-    def apostrophe : parser unit := parser.ch '''
-    def backslash : parser unit := parser.ch '\\'
-    def bang : parser unit := parser.ch '!'
-    def hash : parser unit := parser.ch '#'
-    def dollar : parser unit := parser.ch '$'
-    def asterisk : parser unit := parser.ch '*'
-    def bar : parser unit := parser.ch '|'
-    def dot : parser unit := parser.ch '.'
-    def semicolon : parser unit := parser.ch ';'
-    def colon : parser unit := parser.ch ':'
-    def colon2 : parser unit := parser.str "::"
-    def eq : parser unit := parser.ch '='
-    def eq2 : parser unit := parser.str "=="
-    def define : parser unit := parser.str ":="
-    def lt : parser unit := parser.ch '<'
-    def gt : parser unit := parser.ch '>'
-
-    namespace arrow
-      def r : parser unit := parser.str "->"
-      def l : parser unit := parser.str "<-"
-      def double : parser unit := parser.str "=>"
-      def double2 : parser unit := parser.str "==>"
-    end arrow
+    def print_test {α : Type} [has_to_string α]: (string ⊕ α) → io unit
+    | (sum.inr ok) := io.print ok
+    | (sum.inl err) := io.put_str_ln err
 
     def between (opening : parser unit) (closing : parser unit) {a : Type} (inside : parser a)
       : parser a := do
@@ -61,27 +30,6 @@ namespace arith
       result ← inside,
       closing,
       pure result
-
-    namespace bracket
-      def square {a : Type} : parser a → parser a :=
-        between (parser.ch '[') (parser.ch ']')
-
-      def curly {a : Type} : parser a → parser a :=
-        between (parser.ch '{') (parser.ch '}')
-
-      def angle {a : Type} : parser a → parser a :=
-        between lt gt
-
-      def square_bar {a : Type} : parser a → parser a :=
-        between (parser.str "[|") (parser.str "|]")
-
-      def curly_bar {a : Type} : parser a → parser a :=
-        between (parser.str "{|") (parser.str "|}")
-
-      def angle_bar {a : Type} : parser a → parser a :=
-        between (parser.str "<|") (parser.str "|>")
-
-    end bracket
 
     def comment : parser unit :=
       let recur_until_end (until_end : parser unit) :=
@@ -91,11 +39,71 @@ namespace arith
               ) *> until_end
       in parser.str "/*" *> parser.fix recur_until_end
 
-    def print_test {α : Type} [has_to_string α]: (string ⊕ α) → io unit
-    | (sum.inr ok) := io.print ok
-    | (sum.inl err) := io.put_str_ln err
+    -- 全角spaceとかについてはとりあえず考えない
+    def spaces : parser unit := parser.many' (comment <|> parser.str " ")
 
-    #eval print_test $ parser.run_string comment "/* /* hello */ */"
+    def lexeme {α : Type} : parser α → parser α := (<* spaces)
+
+    def symbol : string → parser unit :=
+      lexeme ∘ parser.str
+
+    def word_import : parser unit := symbol "import"
+    def word_if : parser unit := symbol "if"
+    def word_then : parser unit := symbol "then"
+    def word_else : parser unit := symbol "else"
+    def word_true : parser unit := symbol "true"
+    def word_false  : parser unit := symbol "false"
+    def word_succ : parser unit := symbol "succ"
+    def word_pred : parser unit := symbol "pred"
+    def word_iszero : parser unit := symbol "iszero"
+
+    def underscore : parser unit := symbol "_"
+    def apostrophe : parser unit := symbol "'"
+    def backslash : parser unit := symbol "\\"
+    def bang : parser unit := symbol "!"
+    def hash : parser unit := symbol "#"
+    def dollar : parser unit := symbol "$"
+    def asterisk : parser unit := symbol "*"
+    def bar : parser unit := symbol "|"
+    def dot : parser unit := symbol "."
+    def semicolon : parser unit := symbol ";"
+    def colon : parser unit := symbol ":"
+    def colon2 : parser unit := symbol "::"
+    def eq : parser unit := symbol "="
+    def eq2 : parser unit := symbol "=="
+    def define : parser unit := symbol ":="
+    def lt : parser unit := symbol "<"
+    def gt : parser unit := symbol ">"
+
+    namespace arrow
+      def r : parser unit := symbol "->"
+      def l : parser unit := symbol "<-"
+      def double : parser unit := symbol "=>"
+      def double2 : parser unit := symbol "==>"
+    end arrow
+
+    namespace bracket
+      def square {a : Type} : parser a → parser a :=
+        between (symbol "[") (symbol "]")
+
+      def curly {a : Type} : parser a → parser a :=
+        between (symbol "{") (symbol "}")
+
+      def angle {a : Type} : parser a → parser a :=
+        between lt gt
+
+      def square_bar {a : Type} : parser a → parser a :=
+        between (symbol "[|") (symbol "|]")
+
+      def curly_bar {a : Type} : parser a → parser a :=
+        between (symbol "{|") (symbol "|}")
+
+      def angle_bar {a : Type} : parser a → parser a :=
+        between (symbol "<|") (symbol "|>")
+
+    end bracket
+
+    #eval print_test $ parser.run_string spaces " /* /* hello */ */ "
 
   end parser
 

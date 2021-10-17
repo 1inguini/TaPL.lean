@@ -6,48 +6,41 @@ namespace arith
 
   namespace ast
 
-    structure info : Type := (pos : ℕ)
-
-    def dummy_info : info := { pos := 0 }
-
-    instance : has_repr info :=
-      ⟨λinfo, "{ pos := " ++ repr info.pos ++ " }"⟩
-
     inductive term : Type
-    | true : info → term
-    | false : info → term
-    | if_then_else : info → term → term → term → term
-    | iszero : info → term → term
-    | zero : info → term
-    | succ : info → term → term
-    | pred : info → term → term
+    | true : term
+    | false : term
+    | if_then_else : term → term → term → term
+    | iszero : term → term
+    | zero : term
+    | succ : term → term
+    | pred : term → term
 
     protected def term.repr : term → string
-    | (term.true info) := "(true " ++ repr info ++ ")"
-    | (term.false info) := "(false " ++ repr info ++ ")"
-    | (term.if_then_else info t₀ t₁ t₂) :=
+    | term.true := "true"
+    | term.false := "false"
+    | (term.if_then_else t₀ t₁ t₂) :=
         "(if " ++ term.repr t₀
         ++ " then " ++ term.repr t₁
         ++ " else " ++ term.repr t₂
         ++ ")"
-    | (term.iszero info t) := "(iszero " ++ repr info ++ " " ++ term.repr t ++ ")"
-    | (term.zero info) := "(zero " ++ repr info ++ ")"
-    | (term.succ info t) := "(succ " ++ repr info ++ " " ++ term.repr t ++ ")"
-    | (term.pred info t) := "(pred " ++ repr info ++ " " ++ term.repr t ++ ")"
+    | (term.iszero t) := "(iszero "  ++ term.repr t ++ ")"
+    | (term.zero) := "zero"
+    | (term.succ t) := "(succ " ++ term.repr t ++ ")"
+    | (term.pred t) := "(pred " ++ term.repr t ++ ")"
 
     instance : has_repr term := ⟨term.repr⟩
 
     protected def term.to_string : term → string
-    | (term.true _) := "true"
-    | (term.false _) := "false"
-    | (term.if_then_else _ t₀ t₁ t₂) :=
+    | term.true := "true"
+    | term.false := "false"
+    | (term.if_then_else t₀ t₁ t₂) :=
         "if " ++ term.to_string t₀
         ++ " then " ++ term.to_string t₁
         ++ " else " ++ term.to_string t₂
-    | (term.iszero _ t) := "iszero " ++ term.to_string t
-    | (term.zero _) := "0"
-    | (term.succ _ t) := "succ " ++ term.to_string t
-    | (term.pred _ t) := "pred " ++ term.to_string t
+    | (term.iszero t) := "iszero " ++ term.to_string t
+    | term.zero := "0"
+    | (term.succ t) := "succ " ++ term.to_string t
+    | (term.pred t) := "pred " ++ term.to_string t
 
     instance : has_to_string term := ⟨term.to_string⟩
 
@@ -142,25 +135,19 @@ namespace arith
     end bracket
 
     namespace term
-      protected def info : parser ast.info := λ(input : char_buffer) (pos : ℕ),
-        parse_result.done pos { pos := pos }
 
       -- Constant
-      protected def const (mk : ast.info → ast.term) : parser ast.term := do
-        term <- mk <$> term.info,
-        symbol $ to_string term,
-        pure term
+      protected def const (t : ast.term) : parser ast.term := t <$ symbol (to_string t)
       def true : parser ast.term := term.const ast.term.true
       def false : parser ast.term := term.const ast.term.false
       def zero : parser ast.term := term.const ast.term.zero
 
       -- Unary
       protected def unary
-        (symbol_def : string) (mk : ast.info → ast.term -> ast.term) (inside : parser ast.term)
+        (symbol_def : string) (mk : ast.term -> ast.term) (inside : parser ast.term)
         : parser ast.term := do
-        info ← term.info,
         symbol symbol_def,
-        mk info <$> inside
+        mk <$> inside
       def succ : parser ast.term -> parser ast.term := term.unary "succ" ast.term.succ
       def pred : parser ast.term -> parser ast.term := term.unary "pred" ast.term.pred
       def iszero : parser ast.term -> parser ast.term := term.unary "iszero" ast.term.iszero
@@ -168,8 +155,7 @@ namespace arith
       -- if-then-else
       def if_then_else (inside : parser ast.term) : parser ast.term :=
         ast.term.if_then_else
-        <$> term.info
-        <*> (symbol "if" *> inside)
+        <$> (symbol "if" *> inside)
         <*> (symbol "then" *> inside)
         <*> (symbol "else" *> inside)
 
@@ -202,31 +188,31 @@ namespace arith
 
       -- I decided not to reject non-numeric term
       def step : ast.term → result
-      | (term.if_then_else info (term.true _) t₁ _) := result.evaluated t₁ -- E-IfTrue
-      | (term.if_then_else info (term.false _) _ t₂) := result.evaluated t₂ -- E-IfFalse
-      | t@(term.if_then_else info t₀ t₁ t₂) :=
+      | (term.if_then_else term.true t₁ _) := result.evaluated t₁ -- E-IfTrue
+      | (term.if_then_else term.false _ t₂) := result.evaluated t₂ -- E-IfFalse
+      | t@(term.if_then_else t₀ t₁ t₂) :=
           match step t₀ with
           | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.if_then_else info t₀' t₁ t₂ -- E-If
+          | (result.evaluated t₀') := result.evaluated $ term.if_then_else t₀' t₁ t₂ -- E-If
           end
-      | t@(term.succ info t₀) :=
+      | t@(term.succ t₀) :=
           match step t₀ with
           | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.succ info t₀' -- E-Succ
+          | (result.evaluated t₀') := result.evaluated $ term.succ t₀' -- E-Succ
           end
-      | (term.pred info (term.zero _)) := result.evaluated $ term.zero info -- E-PredZero
-      | (term.pred info (term.succ _ t₀)) := result.evaluated $ term.zero info -- E-PredSucc
-      | t@(term.pred info t₀) :=
+      | (term.pred term.zero) := result.evaluated term.zero -- E-PredZero
+      | (term.pred (term.succ t₀)) := result.evaluated term.zero -- E-PredSucc
+      | t@(term.pred t₀) :=
           match step t₀ with
           | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.pred info t₀' -- E-Pred
+          | (result.evaluated t₀') := result.evaluated $ term.pred t₀' -- E-Pred
           end
-      | (term.iszero info (term.zero _)) := result.evaluated $ term.true info -- E-IsZeroZero
-      | (term.iszero info (term.succ _ _)) := result.evaluated $ term.false info -- E-IsZeroSucc
-      | t@(term.iszero info t₀) :=
+      | (term.iszero term.zero) := result.evaluated $ term.true -- E-IsZeroZero
+      | (term.iszero (term.succ _)) := result.evaluated $ term.false -- E-IsZeroSucc
+      | t@(term.iszero t₀) :=
           match step t₀ with
           | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.iszero info t₀' -- E-IsZero
+          | (result.evaluated t₀') := result.evaluated $ term.iszero t₀' -- E-IsZero
           end
       | t := result.already_normal t -- value is always a normal form
 

@@ -15,7 +15,7 @@ namespace arith
     | succ : term → term
     | pred : term → term
 
-    protected def term.repr : term → string
+    private def term.repr : term → string
     | term.true := "true"
     | term.false := "false"
     | (term.if_then_else t₀ t₁ t₂) :=
@@ -30,7 +30,7 @@ namespace arith
 
     instance : has_repr term := ⟨term.repr⟩
 
-    protected def term.to_string : term → string
+    private def term.to_string : term → string
     | term.true := "true"
     | term.false := "false"
     | (term.if_then_else t₀ t₁ t₂) :=
@@ -44,10 +44,33 @@ namespace arith
 
     instance : has_to_string term := ⟨term.to_string⟩
 
+    def term.size : term → ℕ
+    | (term.if_then_else t₀ t₁ t₂) := (term.size t₀ + term.size t₁ + term.size t₂).succ
+    | (term.iszero t₀) := nat.succ $ term.size t₀
+    | (term.succ t₀) := nat.succ $ term.size t₀
+    | (term.pred t₀) := nat.succ $ term.size t₀
+    | _ := 1
+
+    def term.size_prop : term → Prop
+    | t@(term.if_then_else t₀ t₁ t₂) :=  t.size = (t₀.size + t₁.size + t₂.size).succ
+    | t@(term.iszero t₀) := t.size = t₀.size.succ
+    | t@(term.succ t₀) := t.size = t₀.size.succ
+    | t@(term.pred t₀) := t.size = t₀.size.succ
+    | t := t.size = 1
+
+    def term.size_lemma : ∀(t : term), term.size_prop t
+    | term.true := rfl
+    | term.false := rfl
+    | (term.if_then_else t₀ t₁ t₂) := rfl
+    | (term.iszero t₀) := rfl
+    | (term.succ t₀) := rfl
+    | (term.pred t₀) := rfl
+    | term.zero := rfl
+
   end ast
 
   namespace parser
-    protected def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
+    private def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
     | (sum.inr ok) := io.put_str_ln $ repr ok
     | (sum.inl err) := io.put_str_ln err
 
@@ -135,22 +158,21 @@ namespace arith
     end bracket
 
     namespace term
-
       -- Constant
-      protected def const (t : ast.term) : parser ast.term := t <$ symbol (to_string t)
-      def true : parser ast.term := term.const ast.term.true
-      def false : parser ast.term := term.const ast.term.false
-      def zero : parser ast.term := term.const ast.term.zero
+      private def const (t : ast.term) : parser ast.term := t <$ symbol (to_string t)
+      def true : parser ast.term := const ast.term.true
+      def false : parser ast.term := const ast.term.false
+      def zero : parser ast.term := const ast.term.zero
 
       -- Unary
-      protected def unary
+      private def unary
         (symbol_def : string) (mk : ast.term -> ast.term) (inside : parser ast.term)
         : parser ast.term := do
         symbol symbol_def,
         mk <$> inside
-      def succ : parser ast.term -> parser ast.term := term.unary "succ" ast.term.succ
-      def pred : parser ast.term -> parser ast.term := term.unary "pred" ast.term.pred
-      def iszero : parser ast.term -> parser ast.term := term.unary "iszero" ast.term.iszero
+      def succ : parser ast.term -> parser ast.term := unary "succ" ast.term.succ
+      def pred : parser ast.term -> parser ast.term := unary "pred" ast.term.pred
+      def iszero : parser ast.term -> parser ast.term := unary "iszero" ast.term.iszero
 
       -- if-then-else
       def if_then_else (inside : parser ast.term) : parser ast.term :=
@@ -179,42 +201,97 @@ namespace arith
   namespace eval
     open ast
 
-    -- term may be already normal form before evaluation step
-    inductive result : Type
-    | already_normal : term → result
-    | evaluated : term → result
-
     namespace small_step
 
       -- I decided not to reject non-numeric term
-      def step : ast.term → result
-      | (term.if_then_else term.true t₁ _) := result.evaluated t₁ -- E-IfTrue
-      | (term.if_then_else term.false _ t₂) := result.evaluated t₂ -- E-IfFalse
+      private def step' : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
+      | (term.if_then_else term.true t₁ _) := pure t₁ -- E-IfTrue
+      | (term.if_then_else term.false _ t₂) := pure t₂ -- E-IfFalse
       | t@(term.if_then_else t₀ t₁ t₂) :=
-          match step t₀ with
-          | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.if_then_else t₀' t₁ t₂ -- E-If
+          match step' t₀ with
+          | option.none := option.none
+          | (option.some t₀') := pure $ term.if_then_else t₀' t₁ t₂ -- E-If
           end
       | t@(term.succ t₀) :=
-          match step t₀ with
-          | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.succ t₀' -- E-Succ
+          match step' t₀ with
+          | option.none := option.none
+          | (option.some t₀') := pure $ term.succ t₀' -- E-Succ
           end
-      | (term.pred term.zero) := result.evaluated term.zero -- E-PredZero
-      | (term.pred (term.succ t₀)) := result.evaluated term.zero -- E-PredSucc
+      | (term.pred term.zero) := pure $ term.zero -- E-PredZero
+      | (term.pred (term.succ t₀)) := pure $ term.zero -- E-PredSucc
       | t@(term.pred t₀) :=
-          match step t₀ with
-          | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.pred t₀' -- E-Pred
+          match step' t₀ with
+          | option.none := option.none
+          | (option.some t₀') := pure $ term.pred t₀' -- E-Pred
           end
-      | (term.iszero term.zero) := result.evaluated $ term.true -- E-IsZeroZero
-      | (term.iszero (term.succ _)) := result.evaluated $ term.false -- E-IsZeroSucc
+      | (term.iszero term.zero) := pure $ term.true -- E-IsZeroZero
+      | (term.iszero (term.succ _)) := pure $ term.false -- E-IsZeroSucc
       | t@(term.iszero t₀) :=
-          match step t₀ with
-          | (result.already_normal _) := result.already_normal t
-          | (result.evaluated t₀') := result.evaluated $ term.iszero t₀' -- E-IsZero
+          match step' t₀ with
+          | option.none := option.none
+          | (option.some t₀') := pure $ term.iszero t₀' -- E-IsZero
           end
-      | t := result.already_normal t -- value is always a normal form
+      | t := option.none -- value is always a normal form
+
+      def step (t : term) : term := (step' t).get_or_else t
+
+      def step_decreases_size : ∀(t : term), (step t).size ≤ t.size
+      | t@(term.if_then_else term.true t₁ t₂) :=
+        let p₀ : step t = t₁ := rfl
+          , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+          , p₂ : 1 + t₁.size + t₂.size + 1 = t₁.size + 1 + t₂.size + 1 :=
+              eq.subst (nat.add_comm 1 t₁.size) $ rfl
+          in begin
+            rw p₀, rw p₁, rw p₂,
+            rw nat.add_assoc t₁.size _,
+            exact nat.le_add_right t₁.size (1 + t₂.size + 1),
+          end
+      | t@(term.if_then_else term.false t₁ t₂) :=
+        let p₀ : step t = t₂ := rfl
+          , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+          , p₂ : ((1 + t₁.size) + t₂.size) + 1 = t₂.size + (1 + t₁.size + 1) := begin
+              rw nat.add_comm (1 + t₁.size) t₂.size,
+              rw nat.add_assoc,
+            end
+          in begin
+            rw p₀, rw p₁, rw p₂,
+            rw nat.add_assoc 1 _,
+            exact nat.le_add_right t₂.size (1 + t₁.size + 1),
+          end
+      | t@(term.succ t₀) := sorry
+          /- match step' t₀ with -/
+          /- | option.none := -/
+          /-     let p₀ : step t = t := rfl -/
+          /-     in begin -/
+          /-       end -/
+          /- end -/
+      | t@(term.pred term.zero) := nat.le_succ 1
+      | t@(term.iszero term.zero) := nat.le_succ 1
+      | t@term.true := eq.subst (rfl: step t = t) $ le_refl t.size
+      | t@term.false := eq.subst (rfl: step t = t) $ le_refl t.size
+      | t@term.zero := eq.subst (rfl: step t = t) $ le_refl t.size
+
+      def lt_then_lt_after_step (smaller : term) (bigger : term) : Prop
+        := smaller.size < bigger.size → (step smaller).size < bigger.size
+
+      def eval : term → term :=
+        well_founded.fix sorry $
+          λ(t : term) (loop : ∀(smaller : term), lt_then_lt_after_step smaller t → term),
+            loop t sorry
+
+      #check eval term.zero
+      /- | option.none := option.none -/
+      /- | (option.some t) := -/
+      /-     have (step t).sizeof < 1 + t.sizeof, -/
+      /-     from sorry, -/
+      /-     loop $ step t -/
+
+      /- -- def eval : ast.term → ast.term := loop ∘ step -/
+      /- def eval (t : term) : term := -/
+      /-   match eval' $ option.some t with -/
+      /-   | option.some t' := t' -/
+      /-   | option.none := t -/
+      /-   end -/
 
     end small_step
 
@@ -226,6 +303,6 @@ def main : io unit := do
   test_str <- io.fs.read_file "test.f" ff,
   io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
   | (sum.inl err) := to_string err
-  | (sum.inr x) := to_string x
+  | (sum.inr x) := to_string $ arith.small_step.eval x
   end
 

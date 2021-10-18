@@ -204,86 +204,95 @@ namespace arith
     namespace small_step
 
       -- I decided not to reject non-numeric term
-      private def step' : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
+      def step : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
       | (term.if_then_else term.true t₁ _) := pure t₁ -- E-IfTrue
       | (term.if_then_else term.false _ t₂) := pure t₂ -- E-IfFalse
       | t@(term.if_then_else t₀ t₁ t₂) :=
-          match step' t₀ with
+          match step t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.if_then_else t₀' t₁ t₂ -- E-If
           end
       | t@(term.succ t₀) :=
-          match step' t₀ with
+          match step t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.succ t₀' -- E-Succ
           end
       | (term.pred term.zero) := pure $ term.zero -- E-PredZero
       | (term.pred (term.succ t₀)) := pure $ term.zero -- E-PredSucc
       | t@(term.pred t₀) :=
-          match step' t₀ with
+          match step t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.pred t₀' -- E-Pred
           end
       | (term.iszero term.zero) := pure $ term.true -- E-IsZeroZero
       | (term.iszero (term.succ _)) := pure $ term.false -- E-IsZeroSucc
       | t@(term.iszero t₀) :=
-          match step' t₀ with
+          match step t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.iszero t₀' -- E-IsZero
           end
       | t := option.none -- value is always a normal form
 
-      def step (t : term) : term := (step' t).get_or_else t
+      -- def step_decreases_size : ∀(t : term), (step t).size ≤ t.size
+      -- | _ :- _
+      -- | t@(term.if_then_else term.true t₁ t₂) :=
+      --   let p₀ : step t = t₁ := rfl
+      --     , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+      --     , p₂ : 1 + t₁.size + t₂.size + 1 = t₁.size + 1 + t₂.size + 1 :=
+      --         eq.subst (nat.add_comm 1 t₁.size) $ rfl
+      --     in begin
+      --       rw p₀, rw p₁, rw p₂,
+      --       rw nat.add_assoc t₁.size _,
+      --       exact nat.le_add_right t₁.size (1 + t₂.size + 1),
+      --     end
+      -- | t@(term.if_then_else term.false t₁ t₂) :=
+      --   let p₀ : step t = t₂ := rfl
+      --     , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+      --     , p₂ : ((1 + t₁.size) + t₂.size) + 1 = t₂.size + (1 + t₁.size + 1) := begin
+      --         rw nat.add_comm (1 + t₁.size) t₂.size,
+      --         rw nat.add_assoc,
+      --       end
+      --     in begin
+      --       rw p₀, rw p₁, rw p₂,
+      --       rw nat.add_assoc 1 _,
+      --       exact nat.le_add_right t₂.size (1 + t₁.size + 1),
+      --     end
+      -- | t@(term.succ t₀) :=
+      --     let p₀ : t.size = t₀.size + 1 := rfl
+      --       , p : step (term.succ t₀) = term.succ (step t₀) := begin
+      --       , p₂ : (step t₀).size ≤ t₀.size := step_decreases_size t₀
+      --     in begin
+      --         rw p₀,
+      --         /- apply nat.le_of_lt_succ, -/
+      --         /- apply nat.le_trans p₀, -/
+      --       end
+      -- | t@(term.pred term.zero) := nat.le_succ 1
+      -- | t@(term.iszero term.zero) := nat.le_succ 1
+      -- | t@term.true := eq.subst (rfl: step t = t) $ le_refl t.size
+      -- | t@term.false := eq.subst (rfl: step t = t) $ le_refl t.size
+      -- | t@term.zero := eq.subst (rfl: step t = t) $ le_refl t.size
 
-      def step_decreases_size : ∀(t : term), (step t).size ≤ t.size
-      | t@(term.if_then_else term.true t₁ t₂) :=
-        let p₀ : step t = t₁ := rfl
-          , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-          , p₂ : 1 + t₁.size + t₂.size + 1 = t₁.size + 1 + t₂.size + 1 :=
-              eq.subst (nat.add_comm 1 t₁.size) $ rfl
-          in begin
-            rw p₀, rw p₁, rw p₂,
-            rw nat.add_assoc t₁.size _,
-            exact nat.le_add_right t₁.size (1 + t₂.size + 1),
-          end
-      | t@(term.if_then_else term.false t₁ t₂) :=
-        let p₀ : step t = t₂ := rfl
-          , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-          , p₂ : ((1 + t₁.size) + t₂.size) + 1 = t₂.size + (1 + t₁.size + 1) := begin
-              rw nat.add_comm (1 + t₁.size) t₂.size,
-              rw nat.add_assoc,
+      private def loop (t : term) (loop : ∀(smaller : term), smaller.size < t.size → term) : term :=
+        match step t with
+        | option.none := t
+        | (option.some term.true) := term.true
+        | (option.some term.false) := term.true
+        | (option.some term.zero) := term.true
+        | (option.some t'@(term.iszero t₀)) :=
+            let p₀ : t₀.iszero.size = t₀.size.succ := rfl
+              , p₁ : t₀.iszero.size = t₀.size.succ := rfl
+            in loop t' $ begin
+              rw p₀,
             end
-          in begin
-            rw p₀, rw p₁, rw p₂,
-            rw nat.add_assoc 1 _,
-            exact nat.le_add_right t₂.size (1 + t₁.size + 1),
-          end
-      | t@(term.succ t₀) := sorry
-          /- match step' t₀ with -/
-          /- | option.none := -/
-          /-     let p₀ : step t = t := rfl -/
-          /-     in begin -/
-          /-       end -/
-          /- end -/
-      | t@(term.pred term.zero) := nat.le_succ 1
-      | t@(term.iszero term.zero) := nat.le_succ 1
-      | t@term.true := eq.subst (rfl: step t = t) $ le_refl t.size
-      | t@term.false := eq.subst (rfl: step t = t) $ le_refl t.size
-      | t@term.zero := eq.subst (rfl: step t = t) $ le_refl t.size
-
-      def lt_then_lt_after_step (smaller : term) (bigger : term) : Prop
-        := smaller.size < bigger.size → (step smaller).size < bigger.size
 
       def eval : term → term :=
-        well_founded.fix sorry $
-          λ(t : term) (loop : ∀(smaller : term), lt_then_lt_after_step smaller t → term),
-            loop t sorry
+        well_founded.fix _ loop
 
       #check eval term.zero
       /- | option.none := option.none -/
       /- | (option.some t) := -/
       /-     have (step t).sizeof < 1 + t.sizeof, -/
-      /-     from sorry, -/
+      /-     from _, -/
       /-     loop $ step t -/
 
       /- -- def eval : ast.term → ast.term := loop ∘ step -/

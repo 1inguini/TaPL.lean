@@ -6,6 +6,7 @@ namespace arith
 
   namespace ast
 
+    @[derive decidable_eq]
     inductive term : Type
     | true : term
     | false : term
@@ -14,6 +15,7 @@ namespace arith
     | zero : term
     | succ : term → term
     | pred : term → term
+
 
     private def term.repr : term → string
     | term.true := "true"
@@ -51,22 +53,15 @@ namespace arith
     | (term.pred t₀) := nat.succ $ term.size t₀
     | _ := 1
 
-    def term.size_prop : term → Prop
-    | t@(term.if_then_else t₀ t₁ t₂) :=  t.size = (t₀.size + t₁.size + t₂.size).succ
-    | t@(term.iszero t₀) := t.size = t₀.size.succ
-    | t@(term.succ t₀) := t.size = t₀.size.succ
-    | t@(term.pred t₀) := t.size = t₀.size.succ
-    | t := t.size = 1
-
-    def term.size_lemma : ∀(t : term), term.size_prop t
-    | term.true := rfl
-    | term.false := rfl
-    | (term.if_then_else t₀ t₁ t₂) := rfl
-    | (term.iszero t₀) := rfl
-    | (term.succ t₀) := rfl
-    | (term.pred t₀) := rfl
-    | term.zero := rfl
-
+    def term.size_pos : ∀(t : term), 0 < t.size
+    | (term.if_then_else t₀ t₁ t₂) := nat.succ_pos (term.size t₀ + term.size t₁ + term.size t₂)
+    | (term.iszero t₀) := nat.succ_pos $ term.size t₀
+    | (term.succ t₀) := nat.succ_pos $ term.size t₀
+    | (term.pred t₀) := nat.succ_pos $ term.size t₀
+    | term.true := nat.succ_pos 0
+    | term.false := nat.succ_pos 0
+    | term.zero := nat.succ_pos 0
+  
   end ast
 
   namespace parser
@@ -204,86 +199,226 @@ namespace arith
     namespace small_step
 
       -- I decided not to reject non-numeric term
-      def step : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
+      def maybe_normal : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
       | (term.if_then_else term.true t₁ _) := pure t₁ -- E-IfTrue
       | (term.if_then_else term.false _ t₂) := pure t₂ -- E-IfFalse
       | t@(term.if_then_else t₀ t₁ t₂) :=
-          match step t₀ with
+          match maybe_normal t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.if_then_else t₀' t₁ t₂ -- E-If
           end
       | t@(term.succ t₀) :=
-          match step t₀ with
+          match maybe_normal t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.succ t₀' -- E-Succ
           end
       | (term.pred term.zero) := pure $ term.zero -- E-PredZero
       | (term.pred (term.succ t₀)) := pure $ term.zero -- E-PredSucc
       | t@(term.pred t₀) :=
-          match step t₀ with
+          match maybe_normal t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.pred t₀' -- E-Pred
           end
       | (term.iszero term.zero) := pure $ term.true -- E-IsZeroZero
       | (term.iszero (term.succ _)) := pure $ term.false -- E-IsZeroSucc
       | t@(term.iszero t₀) :=
-          match step t₀ with
+          match maybe_normal t₀ with
           | option.none := option.none
           | (option.some t₀') := pure $ term.iszero t₀' -- E-IsZero
           end
       | t := option.none -- value is always a normal form
 
-      -- def step_decreases_size : ∀(t : term), (step t).size ≤ t.size
-      -- | _ :- _
-      -- | t@(term.if_then_else term.true t₁ t₂) :=
-      --   let p₀ : step t = t₁ := rfl
-      --     , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-      --     , p₂ : 1 + t₁.size + t₂.size + 1 = t₁.size + 1 + t₂.size + 1 :=
-      --         eq.subst (nat.add_comm 1 t₁.size) $ rfl
-      --     in begin
-      --       rw p₀, rw p₁, rw p₂,
-      --       rw nat.add_assoc t₁.size _,
-      --       exact nat.le_add_right t₁.size (1 + t₂.size + 1),
-      --     end
-      -- | t@(term.if_then_else term.false t₁ t₂) :=
-      --   let p₀ : step t = t₂ := rfl
-      --     , p₁ : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-      --     , p₂ : ((1 + t₁.size) + t₂.size) + 1 = t₂.size + (1 + t₁.size + 1) := begin
-      --         rw nat.add_comm (1 + t₁.size) t₂.size,
-      --         rw nat.add_assoc,
-      --       end
-      --     in begin
-      --       rw p₀, rw p₁, rw p₂,
-      --       rw nat.add_assoc 1 _,
-      --       exact nat.le_add_right t₂.size (1 + t₁.size + 1),
-      --     end
-      -- | t@(term.succ t₀) :=
-      --     let p₀ : t.size = t₀.size + 1 := rfl
-      --       , p : step (term.succ t₀) = term.succ (step t₀) := begin
-      --       , p₂ : (step t₀).size ≤ t₀.size := step_decreases_size t₀
-      --     in begin
-      --         rw p₀,
-      --         /- apply nat.le_of_lt_succ, -/
-      --         /- apply nat.le_trans p₀, -/
-      --       end
-      -- | t@(term.pred term.zero) := nat.le_succ 1
-      -- | t@(term.iszero term.zero) := nat.le_succ 1
-      -- | t@term.true := eq.subst (rfl: step t = t) $ le_refl t.size
-      -- | t@term.false := eq.subst (rfl: step t = t) $ le_refl t.size
-      -- | t@term.zero := eq.subst (rfl: step t = t) $ le_refl t.size
+      def step : ∀(t : term), option {t' : term // t'.size < t.size}
+      -- E-IfTrue
+      | t@(term.if_then_else term.true t₁ t₂) := pure
+          { val := t₁
+          , property := 
+              let if_size : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+                , reorder : 1 + t₁.size + t₂.size + 1 = t₁.size + (1 + t₂.size + 1) :=
+                    eq.subst (nat.add_comm 1 t₁.size).symm
+                    $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
+                    $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1).symm
+                    $ rfl
+              , zero_lt_sum : 0 < 1 + t₂.size + 1 := nat.zero_lt_succ (1 + t₂.size)
+              in
+                eq.subst if_size.symm
+                $ eq.subst reorder.symm
+                $ nat.lt_add_of_pos_right zero_lt_sum
+          }
+      -- E-IfFalse
+      | t@(term.if_then_else term.false t₁ t₂) := pure
+          { val := t₂
+          , property :=
+              let if_size : t.size = 1 + t₁.size + t₂.size + 1 := rfl
+                , reorder : 1 + t₁.size + t₂.size + 1 = t₂.size + (1 + t₁.size + 1) :=
+                    eq.subst (nat.add_comm (1 + t₁.size) t₂.size).symm
+                    $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1).symm
+                    $ refl (t₂.size + (1 + t₁.size + 1))
+              , zero_lt_sum : 0 < 1 + t₁.size + 1 := nat.zero_lt_succ (1 + t₁.size)
+              in
+                eq.subst if_size.symm
+                $ eq.subst reorder.symm
+                $ nat.lt_add_of_pos_right zero_lt_sum
+          }
+      -- E-If
+      | t@(term.if_then_else t₀ t₁ t₂) :=
+          match step t₀ with
+          | option.none := option.none
+          | (option.some ⟨t₀', smaller⟩) := pure $
+              { val := term.if_then_else t₀' t₁ t₂
+              , property :=
+                  let sum_smaller_succ
+                      : t₀'.size + (t₁.size + t₂.size).succ < t₀.size + (t₁.size + t₂.size).succ :=
+                        nat.add_lt_add_right (smaller : t₀'.size < t₀.size) (t₁.size + t₂.size + 1)
+                    , sort₀ (t₀ : term)
+                      : (t₀.size + (t₁.size + t₂.size)).succ = t₀.size + (t₁.size + t₂.size).succ :=
+                        nat.add_succ t₀.size (t₁.size + t₂.size)
+                    , sort₁ (t₀ : term)
+                      : t₀.size + t₁.size + t₂.size = t₀.size + (t₁.size + t₂.size) :=
+                        nat.add_assoc t₀.size t₁.size t₂.size
+                    , to_if_then_else (t₀ : term)
+                      : (t₀.size + t₁.size + t₂.size).succ = (term.if_then_else t₀ t₁ t₂).size :=
+                        rfl
+                  in
+                    eq.subst (to_if_then_else t₀)
+                    $ eq.subst (to_if_then_else t₀')
+                    $ eq.subst (sort₁ t₀).symm
+                    $ eq.subst (sort₁ t₀').symm
+                    $ eq.subst (sort₀ t₀).symm
+                    $ eq.subst (sort₀ t₀').symm
+                    $ sum_smaller_succ
+              }
+          end
+      -- E-Succ
+      | t@(term.succ t₀) :=
+          match step t₀ with
+          | option.none := option.none
+          | (option.some ⟨t₀', smaller⟩) := pure $
+              { val := term.succ t₀'
+              , property :=
+                  eq.subst (rfl : t.size = t₀.size.succ)
+                  $ eq.subst (rfl : t₀'.succ.size = t₀'.size.succ)
+                  $ nat.succ_le_succ
+                  $ smaller
+              }
+          end
+      -- E-PredZero
+      | t@(term.pred term.zero) := pure 
+          { val := term.zero
+          , property :=
+              eq.subst (rfl : term.zero.size = 1)
+              $ eq.subst (rfl : t.size = 2)
+              $ nat.succ_le_succ
+              $ nat.zero_lt_succ 0
+          }
+      -- E-PredSucc
+      | t@(term.pred (term.succ t₀)) := pure 
+          { val := term.zero
+          , property :=
+              eq.subst (rfl : t.size = t₀.size.succ.succ)
+              $ eq.subst (rfl : term.zero.size = 1)
+              $ nat.succ_le_succ
+              $ nat.succ_pos t₀.size
+          }
+      -- E-Pred
+      | t@(term.pred t₀) := 
+          match step t₀ with
+          | option.none := option.none
+          | (option.some ⟨t₀', smaller⟩) := pure $
+              { val := term.pred t₀'
+              , property :=
+                  eq.subst (rfl : t.size = t₀.size.succ)
+                  $ eq.subst (rfl : t₀'.pred.size = t₀'.size.succ)
+                  $ nat.succ_le_succ
+                  $ smaller
+              }
+          end
+      -- E-IsZeroZero
+      | t@(term.iszero term.zero) := pure
+          { val := term.true
+          , property :=
+              eq.subst (rfl : term.true.size = 1)
+              $ eq.subst (rfl : t.size = 2)
+              $ nat.succ_le_succ
+              $ nat.zero_lt_succ 0
+          }
+      -- E-IsZeroSucc
+      | t@(term.iszero (term.succ t₀)) := pure
+          { val := term.false
+          , property :=
+              eq.subst (rfl : term.false.size = 1)
+              $ eq.subst (rfl : t.size = t₀.size.succ.succ)
+              $ nat.succ_le_succ
+              $ nat.zero_lt_succ t₀.size
+          }
+      -- E-IsZero
+      | t@(term.iszero t₀) :=
+          match step t₀ with
+          | option.none := option.none
+          | (option.some ⟨t₀', smaller⟩) := pure $
+              { val := term.iszero t₀'
+              , property :=
+                  eq.subst (rfl : t.size = t₀.size.succ)
+                  $ eq.subst (rfl : t₀'.iszero.size = t₀'.size.succ)
+                  $ nat.succ_le_succ
+                  $ smaller
+              }
+          end
+      -- value is always a normal form
+      | t := option.none
+      
+      --   : ∀(t : term), {t' : term // t'.size < t.size ∨ t' = t }
+      -- | t@term.true :=
+      --     { val := t
+      --     , property := λ(not_normal : maybe_normal t = option.some t),
+      --         let no : option.none = option.some t := 
+      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
+      --         in absurd no (λh, option.no_confusion h)
+      --     }
+      -- | t@term.false :=
+      --     { val := t
+      --     , property := λ(not_normal : maybe_normal t = option.some t),
+      --         let no : option.none = option.some t := 
+      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
+      --         in absurd no (λh, option.no_confusion h)
+      --     }
+      -- | t@(term.iszero t₀) :=
+      --     { val := t
+      --     , property := λ(not_normal : maybe_normal t = option.some t),
+      --         let no : option.none = option.some t := 
+      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
+      --         in absurd no (λh, option.no_confusion h)
+      --     }
+      -- | t@term.zero :=
+      --     { val := t
+      --     , property := λ(not_normal : maybe_normal t = option.some t),
+      --         let no : option.none = option.some t := 
+      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
+      --         in absurd no (λh, option.no_confusion h)
+      --     }
 
-      private def loop (t : term) (loop : ∀(smaller : term), smaller.size < t.size → term) : term :=
-        match step t with
-        | option.none := t
-        | (option.some term.true) := term.true
-        | (option.some term.false) := term.true
-        | (option.some term.zero) := term.true
-        | (option.some t'@(term.iszero t₀)) :=
-            let p₀ : t₀.iszero.size = t₀.size.succ := rfl
-              , p₁ : t₀.iszero.size = t₀.size.succ := rfl
-            in loop t' $ begin
-              rw p₀,
-            end
+      private def loop : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
+      | t@term.true := λ_, t
+      | t@term.false := λ_, t
+      | t@term.zero := λ_, t
+      | t := λloop,
+          let ⟨t', decreases⟩ := step_decreases_size t
+          in match option.decidable_eq (step t) (option.some t') with
+          | (decidable.is_false _) := t
+          | (decidable.is_true evaluated) := loop t' $ decreases evaluated
+          end
+
+        /- match step t with -/
+        /- | option.none := t -/
+        /- | (option.some term.true) := term.true -/
+        /- | (option.some term.false) := term.true -/
+        /- | (option.some term.zero) := term.true -/
+        /- | (option.some t'@(term.iszero t₀)) := -/
+        /-     let p₀ : t₀.iszero.size = t₀.size.succ := rfl -/
+        /-       , p₁ : t₀.iszero.size = t₀.size.succ := rfl -/
+        /-     in loop t' $ begin -/
+        /-       rw p₀, -/
+        /-     end -/
 
       def eval : term → term :=
         well_founded.fix _ loop
@@ -312,6 +447,6 @@ def main : io unit := do
   test_str <- io.fs.read_file "test.f" ff,
   io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
   | (sum.inl err) := to_string err
-  | (sum.inr x) := to_string $ arith.small_step.eval x
+  | (sum.inr x) := to_string $ functor.map arith.eval.small_step.eval x
   end
 

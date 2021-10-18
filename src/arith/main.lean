@@ -313,12 +313,8 @@ namespace arith
           }
       -- E-PredSucc
       | t@(term.pred (term.succ t₀)) := pure 
-          { val := term.zero
-          , property :=
-              eq.subst (rfl : t.size = t₀.size.succ.succ)
-              $ eq.subst (rfl : term.zero.size = 1)
-              $ nat.succ_le_succ
-              $ nat.succ_pos t₀.size
+          { val := t₀
+          , property := nat.lt_add_of_pos_right (nat.zero_lt_one_add 1)
           }
       -- E-Pred
       | t@(term.pred t₀) := 

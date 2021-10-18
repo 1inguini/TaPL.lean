@@ -199,94 +199,81 @@ namespace arith
     namespace small_step
 
       -- I decided not to reject non-numeric term
-      def maybe_normal : ast.term → option ast.term -- term may be evaluated or already normal form before evaluation step'
-      | (term.if_then_else term.true t₁ _) := pure t₁ -- E-IfTrue
-      | (term.if_then_else term.false _ t₂) := pure t₂ -- E-IfFalse
-      | t@(term.if_then_else t₀ t₁ t₂) :=
-          match maybe_normal t₀ with
-          | option.none := option.none
-          | (option.some t₀') := pure $ term.if_then_else t₀' t₁ t₂ -- E-If
-          end
-      | t@(term.succ t₀) :=
-          match maybe_normal t₀ with
-          | option.none := option.none
-          | (option.some t₀') := pure $ term.succ t₀' -- E-Succ
-          end
-      | (term.pred term.zero) := pure $ term.zero -- E-PredZero
-      | (term.pred (term.succ t₀)) := pure $ term.zero -- E-PredSucc
-      | t@(term.pred t₀) :=
-          match maybe_normal t₀ with
-          | option.none := option.none
-          | (option.some t₀') := pure $ term.pred t₀' -- E-Pred
-          end
-      | (term.iszero term.zero) := pure $ term.true -- E-IsZeroZero
-      | (term.iszero (term.succ _)) := pure $ term.false -- E-IsZeroSucc
-      | t@(term.iszero t₀) :=
-          match maybe_normal t₀ with
-          | option.none := option.none
-          | (option.some t₀') := pure $ term.iszero t₀' -- E-IsZero
-          end
-      | t := option.none -- value is always a normal form
-
+      -- term may be evaluated or already normal form before evaluation step
+      -- return option.none when already a normal form
+      -- return option.some ... when evaluated
       def step : ∀(t : term), option {t' : term // t'.size < t.size}
       -- E-IfTrue
-      | t@(term.if_then_else term.true t₁ t₂) := pure
+      | (term.if_then_else term.true t₁ t₂) := pure
           { val := t₁
           , property := 
-              let if_size : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-                , reorder : 1 + t₁.size + t₂.size + 1 = t₁.size + (1 + t₂.size + 1) :=
-                    eq.subst (nat.add_comm 1 t₁.size).symm
-                    $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
-                    $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1).symm
-                    $ rfl
-              , zero_lt_sum : 0 < 1 + t₂.size + 1 := nat.zero_lt_succ (1 + t₂.size)
-              in
-                eq.subst if_size.symm
-                $ eq.subst reorder.symm
+              let reorder : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+                      
+                      @id (t₁.size + (1 + t₂.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                        $ eq.subst (nat.add_comm t₁.size 1)
+                      
+                      $ @id (t₁.size + (1 + t₂.size + 1) = ((t₁.size + 1) + t₂.size) + 1)
+                        $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
+                      
+                      $ @id (t₁.size + (1 + t₂.size + 1) = (t₁.size + (1 + t₂.size)) + 1)
+                        $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+
+                      $ @id (t₁.size + (1 + t₂.size + 1) = t₁.size + ((1 + t₂.size) + 1))
+                        $ rfl
+                , zero_lt_sum : 0 < 1 + t₂.size + 1 :=
+                    nat.zero_lt_succ (1 + t₂.size)
+              in @id (t₁.size < (term.if_then_else term.true t₁ t₂).size)
+                $ @id (t₁.size < term.true.size + t₁.size + t₂.size + 1)
+                $ @id (t₁.size < 1 + t₁.size + t₂.size + 1)
+                $ eq.subst reorder
                 $ nat.lt_add_of_pos_right zero_lt_sum
           }
       -- E-IfFalse
-      | t@(term.if_then_else term.false t₁ t₂) := pure
+      | (term.if_then_else term.false t₁ t₂) := pure
           { val := t₂
           , property :=
-              let if_size : t.size = 1 + t₁.size + t₂.size + 1 := rfl
-                , reorder : 1 + t₁.size + t₂.size + 1 = t₂.size + (1 + t₁.size + 1) :=
-                    eq.subst (nat.add_comm (1 + t₁.size) t₂.size).symm
-                    $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1).symm
-                    $ refl (t₂.size + (1 + t₁.size + 1))
-              , zero_lt_sum : 0 < 1 + t₁.size + 1 := nat.zero_lt_succ (1 + t₁.size)
+              let split : t₂.size + (1 + t₁.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+                    @id (t₂.size + (1 + t₁.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                      $ eq.subst (nat.add_comm t₂.size (1 + t₁.size))
+
+                    $ @id (t₂.size + (1 + t₁.size + 1) = (t₂.size + (1 + t₁.size)) + 1)
+                      $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+                    
+                    $ @id (t₂.size + (1 + t₁.size + 1) = t₂.size + ((1 + t₁.size) + 1))
+                      $ rfl
+                , zero_lt_sum : 0 < 1 + t₁.size + 1 :=
+                    nat.zero_lt_succ (1 + t₁.size)
               in
-                eq.subst if_size.symm
-                $ eq.subst reorder.symm
-                $ nat.lt_add_of_pos_right zero_lt_sum
+                @id (t₂.size < (term.if_then_else term.false t₁ t₂).size)
+                $ @id (t₂.size < term.false.size + t₁.size + t₂.size + 1)
+                $ @id (t₂.size < 1 + t₁.size + t₂.size + 1)
+                  $ eq.subst split
+                $ @id (t₂.size < t₂.size + (1 + t₁.size + 1))
+                  $ nat.lt_add_of_pos_right zero_lt_sum
           }
       -- E-If
-      | t@(term.if_then_else t₀ t₁ t₂) :=
+      | (term.if_then_else t₀ t₁ t₂) :=
           match step t₀ with
           | option.none := option.none
           | (option.some ⟨t₀', smaller⟩) := pure $
               { val := term.if_then_else t₀' t₁ t₂
-              , property :=
-                  let sum_smaller_succ
-                      : t₀'.size + (t₁.size + t₂.size).succ < t₀.size + (t₁.size + t₂.size).succ :=
-                        nat.add_lt_add_right (smaller : t₀'.size < t₀.size) (t₁.size + t₂.size + 1)
-                    , sort₀ (t₀ : term)
-                      : (t₀.size + (t₁.size + t₂.size)).succ = t₀.size + (t₁.size + t₂.size).succ :=
-                        nat.add_succ t₀.size (t₁.size + t₂.size)
-                    , sort₁ (t₀ : term)
-                      : t₀.size + t₁.size + t₂.size = t₀.size + (t₁.size + t₂.size) :=
-                        nat.add_assoc t₀.size t₁.size t₂.size
-                    , to_if_then_else (t₀ : term)
-                      : (t₀.size + t₁.size + t₂.size).succ = (term.if_then_else t₀ t₁ t₂).size :=
-                        rfl
-                  in
-                    eq.subst (to_if_then_else t₀)
-                    $ eq.subst (to_if_then_else t₀')
-                    $ eq.subst (sort₁ t₀).symm
-                    $ eq.subst (sort₁ t₀').symm
-                    $ eq.subst (sort₀ t₀).symm
-                    $ eq.subst (sort₀ t₀').symm
-                    $ sum_smaller_succ
+              , property := 
+                  @id ((term.if_then_else t₀' t₁ t₂).size < (term.if_then_else t₀ t₁ t₂).size)
+                  
+                  $ @id (((t₀'.size + t₁.size) + t₂.size) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+                    $ eq.subst (nat.add_assoc t₀'.size t₁.size t₂.size).symm
+                  
+                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+                    $ eq.subst (nat.add_assoc t₀.size t₁.size t₂.size).symm
+                  
+                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < (t₀.size + (t₁.size + t₂.size)) + 1)
+                    $ eq.subst (nat.add_assoc t₀'.size (t₁.size + t₂.size) 1).symm
+                  
+                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < t₀.size + ((t₁.size + t₂.size) + 1))
+                    $ eq.subst (nat.add_assoc t₀.size (t₁.size + t₂.size) 1).symm
+                  
+                  $ @id (t₀'.size + ((t₁.size + t₂.size) + 1) < t₀.size + ((t₁.size + t₂.size) + 1))
+                  $ nat.add_lt_add_right smaller ((t₁.size + t₂.size) + 1)
               }
           end
       -- E-Succ
@@ -296,74 +283,71 @@ namespace arith
           | (option.some ⟨t₀', smaller⟩) := pure $
               { val := term.succ t₀'
               , property :=
-                  eq.subst (rfl : t.size = t₀.size.succ)
-                  $ eq.subst (rfl : t₀'.succ.size = t₀'.size.succ)
-                  $ nat.succ_le_succ
-                  $ smaller
+                  @id ((term.succ t₀').size < (term.succ t₀).size)
+                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ
+                  $ @id (t₀'.size < t₀.size) $ smaller
               }
           end
       -- E-PredZero
-      | t@(term.pred term.zero) := pure 
+      | (term.pred term.zero) := pure 
           { val := term.zero
           , property :=
-              eq.subst (rfl : term.zero.size = 1)
-              $ eq.subst (rfl : t.size = 2)
-              $ nat.succ_le_succ
-              $ nat.zero_lt_succ 0
+              @id (term.zero.size < (term.pred term.zero).size)
+              $ @id (1 < 2) $ nat.lt.base 1
           }
       -- E-PredSucc
-      | t@(term.pred (term.succ t₀)) := pure 
+      | (term.pred (term.succ t₀)) := pure 
           { val := t₀
-          , property := nat.lt_add_of_pos_right (nat.zero_lt_one_add 1)
+          , property :=
+              @id (t₀.size < (term.pred (term.succ t₀)).size)
+              $ @id (t₀.size < t₀.size + 2)
+              $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
+              $ @id (0 < 2) $ nat.zero_lt_one_add 1
           }
       -- E-Pred
-      | t@(term.pred t₀) := 
+      | (term.pred t₀) := 
           match step t₀ with
           | option.none := option.none
           | (option.some ⟨t₀', smaller⟩) := pure $
               { val := term.pred t₀'
               , property :=
-                  eq.subst (rfl : t.size = t₀.size.succ)
-                  $ eq.subst (rfl : t₀'.pred.size = t₀'.size.succ)
-                  $ nat.succ_le_succ
-                  $ smaller
+                  @id ((term.pred t₀').size < (term.pred t₀).size)
+                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ
+                  $ @id (t₀'.size < t₀.size) smaller
               }
           end
       -- E-IsZeroZero
-      | t@(term.iszero term.zero) := pure
+      | (term.iszero term.zero) := pure
           { val := term.true
           , property :=
-              eq.subst (rfl : term.true.size = 1)
-              $ eq.subst (rfl : t.size = 2)
-              $ nat.succ_le_succ
-              $ nat.zero_lt_succ 0
+              @id (term.true.size < (term.iszero term.zero).size)
+              $ @id (1 < 2) $ nat.lt.base 1
           }
       -- E-IsZeroSucc
-      | t@(term.iszero (term.succ t₀)) := pure
+      | (term.iszero (term.succ t₀)) := pure
           { val := term.false
-          , property :=
-              eq.subst (rfl : term.false.size = 1)
-              $ eq.subst (rfl : t.size = t₀.size.succ.succ)
-              $ nat.succ_le_succ
-              $ nat.zero_lt_succ t₀.size
+          , property := 
+              @id (term.false.size < (term.iszero (term.succ t₀)).size)
+              $ @id (1 < t₀.size + 2) $ nat.succ_lt_succ
+              $ @id (0 < t₀.size + 1) $ nat.zero_lt_succ t₀.size
           }
       -- E-IsZero
       | t@(term.iszero t₀) :=
           match step t₀ with
           | option.none := option.none
-          | (option.some ⟨t₀', smaller⟩) := pure $
+          | (option.some ⟨t₀', smaller⟩) := pure
               { val := term.iszero t₀'
               , property :=
-                  eq.subst (rfl : t.size = t₀.size.succ)
-                  $ eq.subst (rfl : t₀'.iszero.size = t₀'.size.succ)
-                  $ nat.succ_le_succ
-                  $ smaller
+                  @id ((term.iszero t₀').size < t.size)
+                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ 
+                  $ @id (t₀'.size < t₀.size) smaller
               }
           end
       -- value is always a normal form
       | t := option.none
       
-      private def loop : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
+      private def loop
+        : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
       | t@term.true := λ_, t
       | t@term.false := λ_, t
       | t@term.zero := λ_, t

@@ -367,75 +367,21 @@ namespace arith
       -- value is always a normal form
       | t := option.none
       
-      --   : ∀(t : term), {t' : term // t'.size < t.size ∨ t' = t }
-      -- | t@term.true :=
-      --     { val := t
-      --     , property := λ(not_normal : maybe_normal t = option.some t),
-      --         let no : option.none = option.some t := 
-      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
-      --         in absurd no (λh, option.no_confusion h)
-      --     }
-      -- | t@term.false :=
-      --     { val := t
-      --     , property := λ(not_normal : maybe_normal t = option.some t),
-      --         let no : option.none = option.some t := 
-      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
-      --         in absurd no (λh, option.no_confusion h)
-      --     }
-      -- | t@(term.iszero t₀) :=
-      --     { val := t
-      --     , property := λ(not_normal : maybe_normal t = option.some t),
-      --         let no : option.none = option.some t := 
-      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
-      --         in absurd no (λh, option.no_confusion h)
-      --     }
-      -- | t@term.zero :=
-      --     { val := t
-      --     , property := λ(not_normal : maybe_normal t = option.some t),
-      --         let no : option.none = option.some t := 
-      --           eq.trans (rfl : maybe_normal t = option.none) not_normal
-      --         in absurd no (λh, option.no_confusion h)
-      --     }
-
       private def loop : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
       | t@term.true := λ_, t
       | t@term.false := λ_, t
       | t@term.zero := λ_, t
       | t := λloop,
-          let ⟨t', decreases⟩ := step_decreases_size t
-          in match option.decidable_eq (step t) (option.some t') with
-          | (decidable.is_false _) := t
-          | (decidable.is_true evaluated) := loop t' $ decreases evaluated
+          match step t with
+          | option.none := t
+          | (option.some ⟨t', decreases⟩) := loop t' decreases
           end
 
-        /- match step t with -/
-        /- | option.none := t -/
-        /- | (option.some term.true) := term.true -/
-        /- | (option.some term.false) := term.true -/
-        /- | (option.some term.zero) := term.true -/
-        /- | (option.some t'@(term.iszero t₀)) := -/
-        /-     let p₀ : t₀.iszero.size = t₀.size.succ := rfl -/
-        /-       , p₁ : t₀.iszero.size = t₀.size.succ := rfl -/
-        /-     in loop t' $ begin -/
-        /-       rw p₀, -/
-        /-     end -/
+      def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
+        inv_image.wf (term.size) nat.lt_wf
 
       def eval : term → term :=
-        well_founded.fix _ loop
-
-      #check eval term.zero
-      /- | option.none := option.none -/
-      /- | (option.some t) := -/
-      /-     have (step t).sizeof < 1 + t.sizeof, -/
-      /-     from _, -/
-      /-     loop $ step t -/
-
-      /- -- def eval : ast.term → ast.term := loop ∘ step -/
-      /- def eval (t : term) : term := -/
-      /-   match eval' $ option.some t with -/
-      /-   | option.some t' := t' -/
-      /-   | option.none := t -/
-      /-   end -/
+        well_founded.fix size_lt_wf loop
 
     end small_step
 

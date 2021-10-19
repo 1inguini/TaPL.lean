@@ -4,65 +4,60 @@ import data.buffer.parser
 
 namespace arith
 
-  namespace ast
+  @[derive decidable_eq]
+  inductive term : Type
+  | true : term
+  | false : term
+  | if_then_else : term → term → term → term
+  | iszero : term → term
+  | zero : term
+  | succ : term → term
+  | pred : term → term
 
-    @[derive decidable_eq]
-    inductive term : Type
-    | true : term
-    | false : term
-    | if_then_else : term → term → term → term
-    | iszero : term → term
-    | zero : term
-    | succ : term → term
-    | pred : term → term
+  private def term.repr : term → string
+  | term.true := "true"
+  | term.false := "false"
+  | (term.if_then_else t₀ t₁ t₂) :=
+      "(if " ++ term.repr t₀
+      ++ " then " ++ term.repr t₁
+      ++ " else " ++ term.repr t₂
+      ++ ")"
+  | (term.iszero t) := "(iszero "  ++ term.repr t ++ ")"
+  | (term.zero) := "zero"
+  | (term.succ t) := "(succ " ++ term.repr t ++ ")"
+  | (term.pred t) := "(pred " ++ term.repr t ++ ")"
 
+  instance : has_repr term := ⟨term.repr⟩
 
-    private def term.repr : term → string
-    | term.true := "true"
-    | term.false := "false"
-    | (term.if_then_else t₀ t₁ t₂) :=
-        "(if " ++ term.repr t₀
-        ++ " then " ++ term.repr t₁
-        ++ " else " ++ term.repr t₂
-        ++ ")"
-    | (term.iszero t) := "(iszero "  ++ term.repr t ++ ")"
-    | (term.zero) := "zero"
-    | (term.succ t) := "(succ " ++ term.repr t ++ ")"
-    | (term.pred t) := "(pred " ++ term.repr t ++ ")"
+  private def term.to_string : term → string
+  | term.true := "true"
+  | term.false := "false"
+  | (term.if_then_else t₀ t₁ t₂) :=
+      "if " ++ term.to_string t₀
+      ++ " then " ++ term.to_string t₁
+      ++ " else " ++ term.to_string t₂
+  | (term.iszero t) := "iszero " ++ term.to_string t
+  | term.zero := "0"
+  | (term.succ t) := "succ " ++ term.to_string t
+  | (term.pred t) := "pred " ++ term.to_string t
 
-    instance : has_repr term := ⟨term.repr⟩
+  instance : has_to_string term := ⟨term.to_string⟩
 
-    private def term.to_string : term → string
-    | term.true := "true"
-    | term.false := "false"
-    | (term.if_then_else t₀ t₁ t₂) :=
-        "if " ++ term.to_string t₀
-        ++ " then " ++ term.to_string t₁
-        ++ " else " ++ term.to_string t₂
-    | (term.iszero t) := "iszero " ++ term.to_string t
-    | term.zero := "0"
-    | (term.succ t) := "succ " ++ term.to_string t
-    | (term.pred t) := "pred " ++ term.to_string t
+  def term.size : term → ℕ
+  | (term.if_then_else t₀ t₁ t₂) := (term.size t₀ + term.size t₁ + term.size t₂).succ
+  | (term.iszero t₀) := nat.succ $ term.size t₀
+  | (term.succ t₀) := nat.succ $ term.size t₀
+  | (term.pred t₀) := nat.succ $ term.size t₀
+  | _ := 1
 
-    instance : has_to_string term := ⟨term.to_string⟩
-
-    def term.size : term → ℕ
-    | (term.if_then_else t₀ t₁ t₂) := (term.size t₀ + term.size t₁ + term.size t₂).succ
-    | (term.iszero t₀) := nat.succ $ term.size t₀
-    | (term.succ t₀) := nat.succ $ term.size t₀
-    | (term.pred t₀) := nat.succ $ term.size t₀
-    | _ := 1
-
-    def term.size_pos : ∀(t : term), 0 < t.size
-    | (term.if_then_else t₀ t₁ t₂) := nat.succ_pos (term.size t₀ + term.size t₁ + term.size t₂)
-    | (term.iszero t₀) := nat.succ_pos $ term.size t₀
-    | (term.succ t₀) := nat.succ_pos $ term.size t₀
-    | (term.pred t₀) := nat.succ_pos $ term.size t₀
-    | term.true := nat.succ_pos 0
-    | term.false := nat.succ_pos 0
-    | term.zero := nat.succ_pos 0
-  
-  end ast
+  def term.size.pos : ∀(t : term), 0 < t.size
+  | (term.if_then_else t₀ t₁ t₂) := nat.succ_pos (term.size t₀ + term.size t₁ + term.size t₂)
+  | (term.iszero t₀) := nat.succ_pos $ term.size t₀
+  | (term.succ t₀) := nat.succ_pos $ term.size t₀
+  | (term.pred t₀) := nat.succ_pos $ term.size t₀
+  | term.true := nat.succ_pos 0
+  | term.false := nat.succ_pos 0
+  | term.zero := nat.succ_pos 0
 
   namespace parser
     private def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
@@ -154,29 +149,29 @@ namespace arith
 
     namespace term
       -- Constant
-      private def const (t : ast.term) : parser ast.term := t <$ symbol (to_string t)
-      def true : parser ast.term := const ast.term.true
-      def false : parser ast.term := const ast.term.false
-      def zero : parser ast.term := const ast.term.zero
+      private def const (t : term) : parser term := t <$ symbol (to_string t)
+      def true : parser term := const term.true
+      def false : parser term := const term.false
+      def zero : parser term := const term.zero
 
       -- Unary
       private def unary
-        (symbol_def : string) (mk : ast.term -> ast.term) (inside : parser ast.term)
-        : parser ast.term := do
+        (symbol_def : string) (mk : term -> term) (inside : parser term)
+        : parser term := do
         symbol symbol_def,
         mk <$> inside
-      def succ : parser ast.term -> parser ast.term := unary "succ" ast.term.succ
-      def pred : parser ast.term -> parser ast.term := unary "pred" ast.term.pred
-      def iszero : parser ast.term -> parser ast.term := unary "iszero" ast.term.iszero
+      def succ : parser term -> parser term := unary "succ" term.succ
+      def pred : parser term -> parser term := unary "pred" term.pred
+      def iszero : parser term -> parser term := unary "iszero" term.iszero
 
       -- if-then-else
-      def if_then_else (inside : parser ast.term) : parser ast.term :=
-        ast.term.if_then_else
+      def if_then_else (inside : parser term) : parser term :=
+        term.if_then_else
         <$> (symbol "if" *> inside)
         <*> (symbol "then" *> inside)
         <*> (symbol "else" *> inside)
 
-      def term : parser ast.term := parser.fix $ λterm,
+      def term : parser term := parser.fix $ λterm,
          true
         <|> false
         <|> if_then_else term
@@ -188,163 +183,157 @@ namespace arith
 
     end term
 
-    def toplevel : parser (list ast.term) :=
+    def toplevel : parser (list term) :=
       spaces *> parser.many1 (term.term <* semicolon)
 
   end parser
 
   namespace eval
-    open ast
 
     namespace small_step
 
+      inductive eval_relation : term → Type
+      | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
+      | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂) 
+      | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
+      | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
+      | PredZero : eval_relation (term.pred term.zero)
       -- I decided not to reject non-numeric term
+      | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
+      | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
+      | IsZeroZero : eval_relation (term.iszero term.zero)
+      | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
+      | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
+
+      def maybe_eval_relation : ∀(t : term), option (eval_relation t)
+      | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
+      | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
+      | (term.if_then_else t₀ t₁ t₂) := do
+          e₀ ← maybe_eval_relation t₀,
+          pure (eval_relation.If t₀ t₁ t₂ e₀)
+      | (term.succ t₀) := do
+          e₀ ← maybe_eval_relation t₀,
+          pure (eval_relation.Succ t₀ e₀)
+      | (term.pred term.zero) := eval_relation.PredZero
+      | (term.pred (term.succ t₀)) := pure (eval_relation.PredSucc t₀)
+      | (term.pred t₀) := do
+          e₀ ← maybe_eval_relation t₀,
+          pure (eval_relation.Pred t₀ e₀)
+      | (term.iszero term.zero) := pure eval_relation.IsZeroZero
+      | (term.iszero (term.succ t₀)) := pure (eval_relation.IsZeroSucc t₀) 
+      | (term.iszero t₀) := do
+          e₀ ← maybe_eval_relation t₀,
+          pure (eval_relation.IsZero t₀ e₀)
+      | _ := option.none
+
       -- term may be evaluated or already normal form before evaluation step
-      -- return option.none when already a normal form
-      -- return option.some ... when evaluated
-      def step : ∀(t : term), option {t' : term // t'.size < t.size}
-      -- E-IfTrue
-      | (term.if_then_else term.true t₁ t₂) := pure
-          { val := t₁
-          , property := 
-              let reorder : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
-                      
-                      @id (t₁.size + (1 + t₂.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
-                        $ eq.subst (nat.add_comm t₁.size 1)
-                      
-                      $ @id (t₁.size + (1 + t₂.size + 1) = ((t₁.size + 1) + t₂.size) + 1)
-                        $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
-                      
-                      $ @id (t₁.size + (1 + t₂.size + 1) = (t₁.size + (1 + t₂.size)) + 1)
-                        $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+      def step : ∀(t : term), eval_relation t → term
+      | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁ 
+      | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
+      | (term.if_then_else _ _ _) (eval_relation.If t₀ t₁ t₂ e₀) :=
+          term.if_then_else (step t₀ e₀) t₁ t₂
+      | (term.succ _) (eval_relation.Succ t₀ e₀) := term.succ (step t₀ e₀)
+      | (term.pred term.zero) eval_relation.PredZero := term.zero
+      | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) := t₀
+      | (term.pred _) (eval_relation.Pred t₀ e₀) := term.pred (step t₀ e₀)
+      | (term.iszero term.zero) eval_relation.IsZeroZero := term.true
+      | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false 
+      | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
+      
+      def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
+      | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
+          let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+                @id (t₁.size + (1 + t₂.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                  $ eq.subst (nat.add_comm t₁.size 1)
+                
+                $ @id (t₁.size + (1 + t₂.size + 1) = ((t₁.size + 1) + t₂.size) + 1)
+                  $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
+                
+                $ @id (t₁.size + (1 + t₂.size + 1) = (t₁.size + (1 + t₂.size)) + 1)
+                  $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
 
-                      $ @id (t₁.size + (1 + t₂.size + 1) = t₁.size + ((1 + t₂.size) + 1))
-                        $ rfl
-                , zero_lt_sum : 0 < 1 + t₂.size + 1 :=
-                    nat.zero_lt_succ (1 + t₂.size)
-              in @id (t₁.size < (term.if_then_else term.true t₁ t₂).size)
-                $ @id (t₁.size < term.true.size + t₁.size + t₂.size + 1)
-                $ @id (t₁.size < 1 + t₁.size + t₂.size + 1)
-                $ eq.subst reorder
-                $ nat.lt_add_of_pos_right zero_lt_sum
-          }
-      -- E-IfFalse
-      | (term.if_then_else term.false t₁ t₂) := pure
-          { val := t₂
-          , property :=
-              let split : t₂.size + (1 + t₁.size + 1) = 1 + t₁.size + t₂.size + 1 :=
-                    @id (t₂.size + (1 + t₁.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
-                      $ eq.subst (nat.add_comm t₂.size (1 + t₁.size))
+                $ @id (t₁.size + (1 + t₂.size + 1) = t₁.size + ((1 + t₂.size) + 1))
+                  $ rfl
+            , zero_lt_sum : 0 < 1 + t₂.size + 1 :=
+                nat.zero_lt_succ (1 + t₂.size)
+          in @id (t₁.size < (term.if_then_else term.true t₁ t₂).size)
+            $ @id (t₁.size < term.true.size + t₁.size + t₂.size + 1)
+            $ @id (t₁.size < 1 + t₁.size + t₂.size + 1)
+            $ eq.subst split
+            $ @id (t₁.size < t₁.size + (1 + t₂.size + 1))
+            $ nat.lt_add_of_pos_right zero_lt_sum
+      | (term.if_then_else term.false _ _) (eval_relation.IfFalse t₁ t₂) :=
+          let split : t₂.size + (1 + t₁.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+                @id (t₂.size + (1 + t₁.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                  $ eq.subst (nat.add_comm t₂.size (1 + t₁.size))
 
-                    $ @id (t₂.size + (1 + t₁.size + 1) = (t₂.size + (1 + t₁.size)) + 1)
-                      $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
-                    
-                    $ @id (t₂.size + (1 + t₁.size + 1) = t₂.size + ((1 + t₁.size) + 1))
-                      $ rfl
-                , zero_lt_sum : 0 < 1 + t₁.size + 1 :=
-                    nat.zero_lt_succ (1 + t₁.size)
-              in
-                @id (t₂.size < (term.if_then_else term.false t₁ t₂).size)
-                $ @id (t₂.size < term.false.size + t₁.size + t₂.size + 1)
-                $ @id (t₂.size < 1 + t₁.size + t₂.size + 1)
-                  $ eq.subst split
-                $ @id (t₂.size < t₂.size + (1 + t₁.size + 1))
-                  $ nat.lt_add_of_pos_right zero_lt_sum
-          }
-      -- E-If
-      | (term.if_then_else t₀ t₁ t₂) :=
-          match step t₀ with
-          | option.none := option.none
-          | (option.some ⟨t₀', smaller⟩) := pure $
-              { val := term.if_then_else t₀' t₁ t₂
-              , property := 
-                  @id ((term.if_then_else t₀' t₁ t₂).size < (term.if_then_else t₀ t₁ t₂).size)
-                  
-                  $ @id (((t₀'.size + t₁.size) + t₂.size) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
-                    $ eq.subst (nat.add_assoc t₀'.size t₁.size t₂.size).symm
-                  
-                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
-                    $ eq.subst (nat.add_assoc t₀.size t₁.size t₂.size).symm
-                  
-                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < (t₀.size + (t₁.size + t₂.size)) + 1)
-                    $ eq.subst (nat.add_assoc t₀'.size (t₁.size + t₂.size) 1).symm
-                  
-                  $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < t₀.size + ((t₁.size + t₂.size) + 1))
-                    $ eq.subst (nat.add_assoc t₀.size (t₁.size + t₂.size) 1).symm
-                  
-                  $ @id (t₀'.size + ((t₁.size + t₂.size) + 1) < t₀.size + ((t₁.size + t₂.size) + 1))
-                  $ nat.add_lt_add_right smaller ((t₁.size + t₂.size) + 1)
-              }
-          end
-      -- E-Succ
-      | t@(term.succ t₀) :=
-          match step t₀ with
-          | option.none := option.none
-          | (option.some ⟨t₀', smaller⟩) := pure $
-              { val := term.succ t₀'
-              , property :=
-                  @id ((term.succ t₀').size < (term.succ t₀).size)
-                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ
-                  $ @id (t₀'.size < t₀.size) $ smaller
-              }
-          end
-      -- E-PredZero
-      | (term.pred term.zero) := pure 
-          { val := term.zero
-          , property :=
-              @id (term.zero.size < (term.pred term.zero).size)
-              $ @id (1 < 2) $ nat.lt.base 1
-          }
-      -- E-PredSucc
-      | (term.pred (term.succ t₀)) := pure 
-          { val := t₀
-          , property :=
-              @id (t₀.size < (term.pred (term.succ t₀)).size)
-              $ @id (t₀.size < t₀.size + 2)
-              $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
-              $ @id (0 < 2) $ nat.zero_lt_one_add 1
-          }
-      -- E-Pred
-      | (term.pred t₀) := 
-          match step t₀ with
-          | option.none := option.none
-          | (option.some ⟨t₀', smaller⟩) := pure $
-              { val := term.pred t₀'
-              , property :=
-                  @id ((term.pred t₀').size < (term.pred t₀).size)
-                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ
-                  $ @id (t₀'.size < t₀.size) smaller
-              }
-          end
-      -- E-IsZeroZero
-      | (term.iszero term.zero) := pure
-          { val := term.true
-          , property :=
-              @id (term.true.size < (term.iszero term.zero).size)
-              $ @id (1 < 2) $ nat.lt.base 1
-          }
-      -- E-IsZeroSucc
-      | (term.iszero (term.succ t₀)) := pure
-          { val := term.false
-          , property := 
+                $ @id (t₂.size + (1 + t₁.size + 1) = (t₂.size + (1 + t₁.size)) + 1)
+                  $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+                
+                $ @id (t₂.size + (1 + t₁.size + 1) = t₂.size + ((1 + t₁.size) + 1))
+                  $ rfl
+            , zero_lt_sum : 0 < 1 + t₁.size + 1 :=
+                nat.zero_lt_succ (1 + t₁.size)
+          in @id (t₂.size < (term.if_then_else term.false t₁ t₂).size)
+            $ @id (t₂.size < term.false.size + t₁.size + t₂.size + 1)
+            $ @id (t₂.size < 1 + t₁.size + t₂.size + 1)
+              $ eq.subst split
+            $ @id (t₂.size < t₂.size + (1 + t₁.size + 1))
+              $ nat.lt_add_of_pos_right zero_lt_sum
+      | t@(term.if_then_else _ _ _) e@(eval_relation.If t₀ t₁ t₂ e₀) :=
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((step t e).size < (term.if_then_else t₀ t₁ t₂).size)
+            $ @id ((term.if_then_else t₀' t₁ t₂).size < (term.if_then_else t₀ t₁ t₂).size)
+            
+            $ @id (((t₀'.size + t₁.size) + t₂.size) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+              $ eq.subst (nat.add_assoc t₀'.size t₁.size t₂.size).symm
+            
+            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+              $ eq.subst (nat.add_assoc t₀.size t₁.size t₂.size).symm
+            
+            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < (t₀.size + (t₁.size + t₂.size)) + 1)
+              $ eq.subst (nat.add_assoc t₀'.size (t₁.size + t₂.size) 1).symm
+            
+            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < t₀.size + ((t₁.size + t₂.size) + 1))
+              $ eq.subst (nat.add_assoc t₀.size (t₁.size + t₂.size) 1).symm
+            
+            $ @id (t₀'.size + ((t₁.size + t₂.size) + 1) < t₀.size + ((t₁.size + t₂.size) + 1))
+            $ nat.add_lt_add_right smaller ((t₁.size + t₂.size) + 1)
+            
+      | (term.succ _) (eval_relation.Succ t₀ e₀) :=
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.succ t₀').size < (term.succ t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred term.zero) eval_relation.PredZero :=
+          @id (term.zero.size < (term.pred term.zero).size)
+          $ @id (1 < 2) $ nat.lt.base 1
+      | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) :=
+          @id (t₀.size < (term.pred (term.succ t₀)).size)
+          $ @id (t₀.size < t₀.size + 2)
+          $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
+          $ @id (0 < 2) $ nat.zero_lt_one_add 1
+      | (term.pred _) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1) 
+            $ nat.succ_lt_succ smaller
+      | (term.iszero term.zero) eval_relation.IsZeroZero :=
+          @id (term.true.size < (term.iszero term.zero).size)
+          $ @id (1 < 2) $ nat.lt.base 1
+      | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) :=
               @id (term.false.size < (term.iszero (term.succ t₀)).size)
               $ @id (1 < t₀.size + 2) $ nat.succ_lt_succ
               $ @id (0 < t₀.size + 1) $ nat.zero_lt_succ t₀.size
-          }
-      -- E-IsZero
-      | t@(term.iszero t₀) :=
-          match step t₀ with
-          | option.none := option.none
-          | (option.some ⟨t₀', smaller⟩) := pure
-              { val := term.iszero t₀'
-              , property :=
-                  @id ((term.iszero t₀').size < t.size)
-                  $ @id (t₀'.size + 1 < t₀.size + 1) $ nat.succ_lt_succ 
-                  $ @id (t₀'.size < t₀.size) smaller
-              }
-          end
-      -- value is always a normal form
-      | t := option.none
+      | (term.iszero _) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
       
       private def loop
         : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
@@ -352,9 +341,9 @@ namespace arith
       | t@term.false := λ_, t
       | t@term.zero := λ_, t
       | t := λloop,
-          match step t with
+          match maybe_eval_relation t with
           | option.none := t
-          | (option.some ⟨t', decreases⟩) := loop t' decreases
+          | (option.some (e : eval_relation t)) := loop (step t e) (step_size_decression t e)
           end
 
       def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
@@ -370,7 +359,7 @@ namespace arith
 end arith
 
 def main : io unit := do
-  test_str <- io.fs.read_file "test.f" ff,
+  test_str ← io.fs.read_file "test.f" ff,
   io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
   | (sum.inl err) := to_string err
   | (sum.inr x) := to_string $ functor.map arith.eval.small_step.eval x

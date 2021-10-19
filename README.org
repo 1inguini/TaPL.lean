@@ -4,7 +4,7 @@ Implementing and learning /[[https://www.cis.upenn.edu/~bcpierce/tapl/checkers/a
 This code does not have one-to-one correspondence to the [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers][original implentation]]
 
 ** Progress
-- [ ] arith
+- [X] arith
 - [ ] bot
 - [ ] equirec
 - [ ] fomega

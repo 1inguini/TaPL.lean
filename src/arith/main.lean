@@ -198,7 +198,7 @@ namespace arith
       | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
       | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
       | PredZero : eval_relation (term.pred term.zero)
-      -- I decided not to reject non-numeric term
+      -- I decided not to reject non-numeric term1inguini
       | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
       | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
       | IsZeroZero : eval_relation (term.iszero term.zero)
@@ -226,6 +226,10 @@ namespace arith
           pure (eval_relation.IsZero t₀ e₀)
       | _ := option.none
 
+      def true_is_normal_form (e : eval_relation term.true) : false := by cases e
+      def false_is_normal_form (e : eval_relation term.false) : false := by cases e
+      def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
+
       -- term may be evaluated or already normal form before evaluation step
       def step : ∀(t : term), eval_relation t → term
       | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁ 
@@ -239,7 +243,7 @@ namespace arith
       | (term.iszero term.zero) eval_relation.IsZeroZero := term.true
       | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false 
       | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
-      
+
       def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
       | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
           let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
@@ -315,11 +319,47 @@ namespace arith
           $ @id (t₀.size < t₀.size + 2)
           $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
           $ @id (0 < 2) $ nat.zero_lt_one_add 1
-      | (term.pred _) (eval_relation.Pred t₀ e₀) := 
+      | (term.pred term.true) (eval_relation.Pred t₀ e₀) := 
           let t₀' := step t₀ e₀
             , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
           in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1) 
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred term.false) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred (term.if_then_else _ _ _)) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred (term.pred _)) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred term.zero) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred (term.succ _)) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.pred (term.iszero _)) (eval_relation.Pred t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.pred t₀').size < (term.pred t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
             $ nat.succ_lt_succ smaller
       | (term.iszero term.zero) eval_relation.IsZeroZero :=
           @id (term.true.size < (term.iszero term.zero).size)
@@ -328,7 +368,43 @@ namespace arith
               @id (term.false.size < (term.iszero (term.succ t₀)).size)
               $ @id (1 < t₀.size + 2) $ nat.succ_lt_succ
               $ @id (0 < t₀.size + 1) $ nat.zero_lt_succ t₀.size
-      | (term.iszero _) (eval_relation.IsZero t₀ e₀) := 
+      | (term.iszero term.true) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero term.false) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero (term.if_then_else _ _ _)) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero (term.iszero _)) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero term.zero) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero (term.succ _)) (eval_relation.IsZero t₀ e₀) := 
+          let t₀' := step t₀ e₀
+            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+            $ @id (t₀'.size + 1 < t₀.size + 1)
+            $ nat.succ_lt_succ smaller
+      | (term.iszero (term.pred _)) (eval_relation.IsZero t₀ e₀) := 
           let t₀' := step t₀ e₀
             , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
           in @id ((term.iszero t₀').size < (term.iszero t₀).size)

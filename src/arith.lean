@@ -1,8 +1,6 @@
-import system.io
-import data.buffer
-import data.buffer.parser
+import common
 
-namespace language
+namespace arith
 
   @[derive decidable_eq]
   inductive term : Type
@@ -15,7 +13,7 @@ namespace language
   | pred : term → term
 
   namespace term 
-  
+
     private def repr : term → string
     | true := "true"
     | false := "false"
@@ -63,148 +61,40 @@ namespace language
 
   end term
 
-  @[derive decidable_eq]
-  inductive type : Type
-  | Nat : type
-  | Bool : type
-  
-  namespace type
-
-    instance : has_repr type := ⟨λt, match t with
-      | type.Nat := "Nat"
-      | type.Bool := "Bool"
-      end⟩
-
-    instance : has_to_string type := ⟨repr⟩
-
-  end type
-
   namespace parser
-    private def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
-    | (sum.inr ok) := io.put_str_ln $ repr ok
-    | (sum.inl err) := io.put_str_ln err
 
-    def between (opening : parser unit) (closing : parser unit) {a : Type} (inside : parser a)
-      : parser a := do
-      opening,
-      result ← inside,
-      closing,
-      pure result
+    -- Constant
+    private def const (t : term) : parser term := t <$ parser.symbol (to_string t)
+    def true : parser term := const term.true
+    def false : parser term := const term.false
+    def zero : parser term := const term.zero
 
-    def comment : parser unit :=
-      let recur_until_end (until_end : parser unit) :=
-          parser.str "*/"
-          <|> ( parser.str "/*" *> until_end
-                <|> unit.star <$ parser.any_char
-              ) *> until_end
-      in parser.str "/*" *> parser.fix recur_until_end
+    -- Unary
+    private def unary
+      (symbol_def : string) (mk : term -> term) (inside : parser term)
+      : parser term := do
+      parser.symbol symbol_def,
+      mk <$> inside
+    def succ : parser term -> parser term := unary "succ" term.succ
+    def pred : parser term -> parser term := unary "pred" term.pred
+    def iszero : parser term -> parser term := unary "iszero" term.iszero
 
-    -- 全角spaceとかについてはとりあえず考えない
-    def spaces : parser unit := parser.many'
-      (comment <|> unit.star <$ parser.one_of [' ', '\n', '\t'])
+    -- if-then-else
+    def if_then_else (inside : parser term) : parser term :=
+      term.if_then_else
+      <$> (parser.symbol "if" *> inside)
+      <*> (parser.symbol "then" *> inside)
+      <*> (parser.symbol "else" *> inside)
 
-    def lexeme {α : Type} : parser α → parser α := (<* spaces)
-
-    def symbol : string → parser unit :=
-      lexeme ∘ parser.str
-
-    def word_import : parser unit := symbol "import"
-    def word_if : parser unit := symbol "if"
-    def word_then : parser unit := symbol "then"
-    def word_else : parser unit := symbol "else"
-    def word_true : parser unit := symbol "true"
-    def word_false  : parser unit := symbol "false"
-    def word_succ : parser unit := symbol "succ"
-    def word_pred : parser unit := symbol "pred"
-    def word_iszero : parser unit := symbol "iszero"
-
-    def underscore : parser unit := symbol "_"
-    def apostrophe : parser unit := symbol "'"
-    def backslash : parser unit := symbol "\\"
-    def bang : parser unit := symbol "!"
-    def hash : parser unit := symbol "#"
-    def dollar : parser unit := symbol "$"
-    def asterisk : parser unit := symbol "*"
-    def bar : parser unit := symbol "|"
-    def dot : parser unit := symbol "."
-    def semicolon : parser unit := symbol ";"
-    def colon : parser unit := symbol ":"
-    def colon2 : parser unit := symbol "::"
-    def eq : parser unit := symbol "="
-    def eq2 : parser unit := symbol "=="
-    def define : parser unit := symbol ":="
-    def lt : parser unit := symbol "<"
-    def gt : parser unit := symbol ">"
-
-    namespace arrow
-      def r : parser unit := symbol "->"
-      def l : parser unit := symbol "<-"
-      def double : parser unit := symbol "=>"
-      def double2 : parser unit := symbol "==>"
-    end arrow
-
-    namespace bracket
-      def paren {a : Type} : parser a → parser a :=
-        between (symbol "(") (symbol ")")
-
-      def square {a : Type} : parser a → parser a :=
-        between (symbol "[") (symbol "]")
-
-      def curly {a : Type} : parser a → parser a :=
-        between (symbol "{") (symbol "}")
-
-      def angle {a : Type} : parser a → parser a :=
-        between lt gt
-
-      def square_bar {a : Type} : parser a → parser a :=
-        between (symbol "[|") (symbol "|]")
-
-      def curly_bar {a : Type} : parser a → parser a :=
-        between (symbol "{|") (symbol "|}")
-
-      def angle_bar {a : Type} : parser a → parser a :=
-        between (symbol "<|") (symbol "|>")
-
-    end bracket
-
-    namespace term
-      -- Constant
-      private def const (t : term) : parser term := t <$ symbol (to_string t)
-      def true : parser term := const term.true
-      def false : parser term := const term.false
-      def zero : parser term := const term.zero
-
-      -- Unary
-      private def unary
-        (symbol_def : string) (mk : term -> term) (inside : parser term)
-        : parser term := do
-        symbol symbol_def,
-        mk <$> inside
-      def succ : parser term -> parser term := unary "succ" term.succ
-      def pred : parser term -> parser term := unary "pred" term.pred
-      def iszero : parser term -> parser term := unary "iszero" term.iszero
-
-      -- if-then-else
-      def if_then_else (inside : parser term) : parser term :=
-        term.if_then_else
-        <$> (symbol "if" *> inside)
-        <*> (symbol "then" *> inside)
-        <*> (symbol "else" *> inside)
-
-      def term : parser term := parser.fix $ λterm,
-         true
-        <|> false
-        <|> if_then_else term
-        <|> zero
-        <|> succ term
-        <|> pred term
-        <|> iszero term
-        <|> bracket.paren term
-
-    end term
-
-    def toplevel : parser (list term) :=
-      spaces *> parser.many1 (term.term <* semicolon)
+    def toplevel : parser (list term) := parser.terms $ λterm,
+      true
+      <|> false
+      <|> if_then_else term
+      <|> zero
+      <|> succ term
+      <|> pred term
+      <|> iszero term
+      <|> parser.bracket.paren term
 
   end parser
 
@@ -446,73 +336,13 @@ namespace language
     def eval : term → term :=
       well_founded.fix size_lt_wf loop
 
-inductive type_relation : type → term → Type
-    | True : type_relation type.Bool term.true
-    | False : type_relation type.Bool term.false
-    | If {T₁ T₂ : type} {t₀ t₁ t₂ : term}
-      : type_relation type.Bool t₀
-      → T₁ = T₂
-      → type_relation T₁ t₁
-      → type_relation T₂ t₂
-      → type_relation T₁ (term.if_then_else t₀ t₁ t₂)
-    | Zero : type_relation type.Nat term.zero
-    | Succ {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Nat (term.succ t₀)
-    | Pred {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Nat (term.pred t₀)
-    | IsZero {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Bool (term.iszero t₀)
-
-    def maybe_type_relation : ∀(t : term), option Σ(T : type), type_relation T t
-    | term.true := pure ⟨type.Bool, type_relation.True⟩
-    | term.false := pure ⟨type.Bool, type_relation.False⟩
-    | (term.if_then_else t₀ t₁ t₂) := do
-        Ttr₀ <- maybe_type_relation t₀,
-        match Ttr₀ with
-        | ⟨type.Bool, tr₀⟩ := do
-            ⟨T₁, tr₁⟩ <- maybe_type_relation t₁,
-            ⟨T₂, tr₂⟩ <- maybe_type_relation t₂,
-            if ok : T₁ = T₂
-            then pure ⟨T₁, type_relation.If tr₀ ok tr₁ tr₂⟩
-            else option.none
-        | _ := option.none
-        end
-    | term.zero := pure ⟨type.Nat, type_relation.Zero⟩
-    | (term.succ t₀) := do
-        Ttr₀ <- maybe_type_relation t₀,
-        match Ttr₀ with
-        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Nat, type_relation.Succ tr₀⟩
-        | _ := option.none
-        end
-    | (term.pred t₀) := do
-        Ttr₀ <- maybe_type_relation t₀,
-        match Ttr₀ with
-        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Nat, type_relation.Pred tr₀⟩
-        | _ := option.none
-        end
-    | (term.iszero t₀) := do
-        Ttr₀ <- maybe_type_relation t₀,
-        match Ttr₀ with
-        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Bool, type_relation.IsZero tr₀⟩
-        | _ := option.none
-        end
-
-      def typecheck (t : term) : option type := 
-        match maybe_type_relation t with
-        | option.none := option.none
-        | option.some ⟨T, _⟩ := T
-        end
-
   end small_step
 
-end language
+  def main (src : char_buffer) : io unit := do
+    match parser.run parser.toplevel src with
+    | (sum.inl err) := io.print_ln err
+    | (sum.inr ts) := io.print_ln $
+        functor.map small_step.eval ts
+    end
 
-def eval_file (filename : string) : io unit := do
-  io.put_str_ln $ "Evaluating " ++ filename ++ " ...",
-  test_str ← io.fs.read_file filename ff,
-  match parser.run language.parser.toplevel test_str with
-  | (sum.inl err) := io.print err
-  | (sum.inr ts) := io.print $
-      functor.map (λt, (language.small_step.typecheck t, language.small_step.eval t)) ts
-  end
-
-def main : io unit := do
-  eval_file "test.f",
-  eval_file "test_ex.f"
+end arith

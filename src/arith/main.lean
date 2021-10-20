@@ -2,7 +2,7 @@ import system.io
 import data.buffer
 import data.buffer.parser
 
-namespace arith
+namespace language
 
   @[derive decidable_eq]
   inductive term : Type
@@ -432,12 +432,12 @@ namespace arith
 
   end small_step
 
-end arith
+end language
 
 def main : io unit := do
   test_str ← io.fs.read_file "test.f" ff,
-  io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
+  io.put_str_ln $ match parser.run language.parser.toplevel test_str with
   | (sum.inl err) := to_string err
-  | (sum.inr x) := to_string $ functor.map arith.small_step.eval x
+  | (sum.inr x) := to_string $ functor.map language.small_step.eval x
   end
 

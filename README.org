@@ -4,8 +4,11 @@ Implementing and learning /[[https://www.cis.upenn.edu/~bcpierce/tapl/checkers/a
 This code does not have one-to-one correspondence to the [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers][original implentation]]
 
 ** Progress
-- [X] arith
-- [X] tyarith
+- [X] Chapter 1~4 *arith*
+- [ ] Chapter 5~7 *fulluntyped*
+- [X] Chapter 8 *tyarith*
+- [ ] Chapter 9 *fullsimple*
+- [ ] Chapter 10 *simplebool*
 - [ ] bot
 - [ ] equirec
 - [ ] fomega
@@ -19,16 +22,13 @@ This code does not have one-to-one correspondence to the [[https://www.cis.upenn
 - [ ] fullpoly
 - [ ] fullrecon
 - [ ] fullref
-- [ ] fullsimple
 - [ ] fullsub
-- [ ] fulluntyped
 - [ ] fullupdate
 - [ ] letexercise
 - [ ] purefsub
 - [ ] rcdsubbot
 - [ ] recon
 - [ ] reconbase
-- [ ] simplebool
 - [ ] untyped
 
 ** License

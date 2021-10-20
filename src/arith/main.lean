@@ -192,249 +192,245 @@ namespace arith
 
   end parser
 
-  namespace eval
+  namespace small_step
 
-    namespace small_step
+    inductive eval_relation : term → Type
+    | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
+    | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂) 
+    | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
+    | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
+    | PredZero : eval_relation (term.pred term.zero)
+    -- I decided not to reject non-numeric term1inguini
+    | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
+    | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
+    | IsZeroZero : eval_relation (term.iszero term.zero)
+    | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
+    | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
 
-      inductive eval_relation : term → Type
-      | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
-      | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂) 
-      | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
-      | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
-      | PredZero : eval_relation (term.pred term.zero)
-      -- I decided not to reject non-numeric term1inguini
-      | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
-      | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
-      | IsZeroZero : eval_relation (term.iszero term.zero)
-      | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
-      | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
+    def maybe_eval_relation : ∀(t : term), option (eval_relation t)
+    | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
+    | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
+    | (term.if_then_else t₀ t₁ t₂) := do
+        e₀ ← maybe_eval_relation t₀,
+        pure (eval_relation.If t₀ t₁ t₂ e₀)
+    | (term.succ t₀) := do
+        e₀ ← maybe_eval_relation t₀,
+        pure (eval_relation.Succ t₀ e₀)
+    | (term.pred term.zero) := eval_relation.PredZero
+    | (term.pred (term.succ t₀)) := pure (eval_relation.PredSucc t₀)
+    | (term.pred t₀) := do
+        e₀ ← maybe_eval_relation t₀,
+        pure (eval_relation.Pred t₀ e₀)
+    | (term.iszero term.zero) := pure eval_relation.IsZeroZero
+    | (term.iszero (term.succ t₀)) := pure (eval_relation.IsZeroSucc t₀) 
+    | (term.iszero t₀) := do
+        e₀ ← maybe_eval_relation t₀,
+        pure (eval_relation.IsZero t₀ e₀)
+    | _ := option.none
 
-      def maybe_eval_relation : ∀(t : term), option (eval_relation t)
-      | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
-      | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
-      | (term.if_then_else t₀ t₁ t₂) := do
-          e₀ ← maybe_eval_relation t₀,
-          pure (eval_relation.If t₀ t₁ t₂ e₀)
-      | (term.succ t₀) := do
-          e₀ ← maybe_eval_relation t₀,
-          pure (eval_relation.Succ t₀ e₀)
-      | (term.pred term.zero) := eval_relation.PredZero
-      | (term.pred (term.succ t₀)) := pure (eval_relation.PredSucc t₀)
-      | (term.pred t₀) := do
-          e₀ ← maybe_eval_relation t₀,
-          pure (eval_relation.Pred t₀ e₀)
-      | (term.iszero term.zero) := pure eval_relation.IsZeroZero
-      | (term.iszero (term.succ t₀)) := pure (eval_relation.IsZeroSucc t₀) 
-      | (term.iszero t₀) := do
-          e₀ ← maybe_eval_relation t₀,
-          pure (eval_relation.IsZero t₀ e₀)
-      | _ := option.none
+    def true_is_normal_form (e : eval_relation term.true) : false := by cases e
+    def false_is_normal_form (e : eval_relation term.false) : false := by cases e
+    def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
 
-      def true_is_normal_form (e : eval_relation term.true) : false := by cases e
-      def false_is_normal_form (e : eval_relation term.false) : false := by cases e
-      def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
+    -- term may be evaluated or already normal form before evaluation step
+    def step : ∀(t : term), eval_relation t → term
+    | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁ 
+    | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
+    | (term.if_then_else _ _ _) (eval_relation.If t₀ t₁ t₂ e₀) :=
+        term.if_then_else (step t₀ e₀) t₁ t₂
+    | (term.succ _) (eval_relation.Succ t₀ e₀) := term.succ (step t₀ e₀)
+    | (term.pred term.zero) eval_relation.PredZero := term.zero
+    | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) := t₀
+    | (term.pred _) (eval_relation.Pred t₀ e₀) := term.pred (step t₀ e₀)
+    | (term.iszero term.zero) eval_relation.IsZeroZero := term.true
+    | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false 
+    | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
 
-      -- term may be evaluated or already normal form before evaluation step
-      def step : ∀(t : term), eval_relation t → term
-      | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁ 
-      | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
-      | (term.if_then_else _ _ _) (eval_relation.If t₀ t₁ t₂ e₀) :=
-          term.if_then_else (step t₀ e₀) t₁ t₂
-      | (term.succ _) (eval_relation.Succ t₀ e₀) := term.succ (step t₀ e₀)
-      | (term.pred term.zero) eval_relation.PredZero := term.zero
-      | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) := t₀
-      | (term.pred _) (eval_relation.Pred t₀ e₀) := term.pred (step t₀ e₀)
-      | (term.iszero term.zero) eval_relation.IsZeroZero := term.true
-      | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false 
-      | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
+    def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
+    | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
+        let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+              @id (t₁.size + (1 + t₂.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                $ eq.subst (nat.add_comm t₁.size 1)
+              
+              $ @id (t₁.size + (1 + t₂.size + 1) = ((t₁.size + 1) + t₂.size) + 1)
+                $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
+              
+              $ @id (t₁.size + (1 + t₂.size + 1) = (t₁.size + (1 + t₂.size)) + 1)
+                $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
 
-      def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
-      | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
-          let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
-                @id (t₁.size + (1 + t₂.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
-                  $ eq.subst (nat.add_comm t₁.size 1)
-                
-                $ @id (t₁.size + (1 + t₂.size + 1) = ((t₁.size + 1) + t₂.size) + 1)
-                  $ eq.subst (nat.add_assoc t₁.size 1 t₂.size).symm
-                
-                $ @id (t₁.size + (1 + t₂.size + 1) = (t₁.size + (1 + t₂.size)) + 1)
-                  $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+              $ @id (t₁.size + (1 + t₂.size + 1) = t₁.size + ((1 + t₂.size) + 1))
+                $ rfl
+          , zero_lt_sum : 0 < 1 + t₂.size + 1 :=
+              nat.zero_lt_succ (1 + t₂.size)
+        in @id (t₁.size < (term.if_then_else term.true t₁ t₂).size)
+          $ @id (t₁.size < term.true.size + t₁.size + t₂.size + 1)
+          $ @id (t₁.size < 1 + t₁.size + t₂.size + 1)
+          $ eq.subst split
+          $ @id (t₁.size < t₁.size + (1 + t₂.size + 1))
+          $ nat.lt_add_of_pos_right zero_lt_sum
+    | (term.if_then_else term.false _ _) (eval_relation.IfFalse t₁ t₂) :=
+        let split : t₂.size + (1 + t₁.size + 1) = 1 + t₁.size + t₂.size + 1 :=
+              @id (t₂.size + (1 + t₁.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
+                $ eq.subst (nat.add_comm t₂.size (1 + t₁.size))
 
-                $ @id (t₁.size + (1 + t₂.size + 1) = t₁.size + ((1 + t₂.size) + 1))
-                  $ rfl
-            , zero_lt_sum : 0 < 1 + t₂.size + 1 :=
-                nat.zero_lt_succ (1 + t₂.size)
-          in @id (t₁.size < (term.if_then_else term.true t₁ t₂).size)
-            $ @id (t₁.size < term.true.size + t₁.size + t₂.size + 1)
-            $ @id (t₁.size < 1 + t₁.size + t₂.size + 1)
+              $ @id (t₂.size + (1 + t₁.size + 1) = (t₂.size + (1 + t₁.size)) + 1)
+                $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
+              
+              $ @id (t₂.size + (1 + t₁.size + 1) = t₂.size + ((1 + t₁.size) + 1))
+                $ rfl
+          , zero_lt_sum : 0 < 1 + t₁.size + 1 :=
+              nat.zero_lt_succ (1 + t₁.size)
+        in @id (t₂.size < (term.if_then_else term.false t₁ t₂).size)
+          $ @id (t₂.size < term.false.size + t₁.size + t₂.size + 1)
+          $ @id (t₂.size < 1 + t₁.size + t₂.size + 1)
             $ eq.subst split
-            $ @id (t₁.size < t₁.size + (1 + t₂.size + 1))
+          $ @id (t₂.size < t₂.size + (1 + t₁.size + 1))
             $ nat.lt_add_of_pos_right zero_lt_sum
-      | (term.if_then_else term.false _ _) (eval_relation.IfFalse t₁ t₂) :=
-          let split : t₂.size + (1 + t₁.size + 1) = 1 + t₁.size + t₂.size + 1 :=
-                @id (t₂.size + (1 + t₁.size + 1) = ((1 + t₁.size) + t₂.size) + 1)
-                  $ eq.subst (nat.add_comm t₂.size (1 + t₁.size))
+    | t@(term.if_then_else _ _ _) e@(eval_relation.If t₀ t₁ t₂ e₀) :=
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((step t e).size < (term.if_then_else t₀ t₁ t₂).size)
+          $ @id ((term.if_then_else t₀' t₁ t₂).size < (term.if_then_else t₀ t₁ t₂).size)
+          
+          $ @id (((t₀'.size + t₁.size) + t₂.size) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+            $ eq.subst (nat.add_assoc t₀'.size t₁.size t₂.size).symm
+          
+          $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
+            $ eq.subst (nat.add_assoc t₀.size t₁.size t₂.size).symm
+          
+          $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < (t₀.size + (t₁.size + t₂.size)) + 1)
+            $ eq.subst (nat.add_assoc t₀'.size (t₁.size + t₂.size) 1).symm
+          
+          $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < t₀.size + ((t₁.size + t₂.size) + 1))
+            $ eq.subst (nat.add_assoc t₀.size (t₁.size + t₂.size) 1).symm
+          
+          $ @id (t₀'.size + ((t₁.size + t₂.size) + 1) < t₀.size + ((t₁.size + t₂.size) + 1))
+          $ nat.add_lt_add_right smaller ((t₁.size + t₂.size) + 1)
+          
+    | (term.succ _) (eval_relation.Succ t₀ e₀) :=
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.succ t₀').size < (term.succ t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred term.zero) eval_relation.PredZero :=
+        @id (term.zero.size < (term.pred term.zero).size)
+        $ @id (1 < 2) $ nat.lt.base 1
+    | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) :=
+        @id (t₀.size < (term.pred (term.succ t₀)).size)
+        $ @id (t₀.size < t₀.size + 2)
+        $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
+        $ @id (0 < 2) $ nat.zero_lt_one_add 1
+    | (term.pred term.true) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred term.false) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred (term.if_then_else _ _ _)) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred (term.pred _)) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred term.zero) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred (term.succ _)) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.pred (term.iszero _)) (eval_relation.Pred t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.pred t₀').size < (term.pred t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero term.zero) eval_relation.IsZeroZero :=
+        @id (term.true.size < (term.iszero term.zero).size)
+        $ @id (1 < 2) $ nat.lt.base 1
+    | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) :=
+            @id (term.false.size < (term.iszero (term.succ t₀)).size)
+            $ @id (1 < t₀.size + 2) $ nat.succ_lt_succ
+            $ @id (0 < t₀.size + 1) $ nat.zero_lt_succ t₀.size
+    | (term.iszero term.true) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero term.false) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero (term.if_then_else _ _ _)) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero (term.iszero _)) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero term.zero) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero (term.succ _)) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    | (term.iszero (term.pred _)) (eval_relation.IsZero t₀ e₀) := 
+        let t₀' := step t₀ e₀
+          , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
+        in @id ((term.iszero t₀').size < (term.iszero t₀).size)
+          $ @id (t₀'.size + 1 < t₀.size + 1)
+          $ nat.succ_lt_succ smaller
+    
+    private def loop
+      : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
+    | t@term.true := λ_, t
+    | t@term.false := λ_, t
+    | t@term.zero := λ_, t
+    | t := λloop,
+        match maybe_eval_relation t with
+        | option.none := t
+        | (option.some (e : eval_relation t)) := loop (step t e) (step_size_decression t e)
+        end
 
-                $ @id (t₂.size + (1 + t₁.size + 1) = (t₂.size + (1 + t₁.size)) + 1)
-                  $ eq.subst (nat.add_assoc t₁.size (1 + t₂.size) 1)
-                
-                $ @id (t₂.size + (1 + t₁.size + 1) = t₂.size + ((1 + t₁.size) + 1))
-                  $ rfl
-            , zero_lt_sum : 0 < 1 + t₁.size + 1 :=
-                nat.zero_lt_succ (1 + t₁.size)
-          in @id (t₂.size < (term.if_then_else term.false t₁ t₂).size)
-            $ @id (t₂.size < term.false.size + t₁.size + t₂.size + 1)
-            $ @id (t₂.size < 1 + t₁.size + t₂.size + 1)
-              $ eq.subst split
-            $ @id (t₂.size < t₂.size + (1 + t₁.size + 1))
-              $ nat.lt_add_of_pos_right zero_lt_sum
-      | t@(term.if_then_else _ _ _) e@(eval_relation.If t₀ t₁ t₂ e₀) :=
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((step t e).size < (term.if_then_else t₀ t₁ t₂).size)
-            $ @id ((term.if_then_else t₀' t₁ t₂).size < (term.if_then_else t₀ t₁ t₂).size)
-            
-            $ @id (((t₀'.size + t₁.size) + t₂.size) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
-              $ eq.subst (nat.add_assoc t₀'.size t₁.size t₂.size).symm
-            
-            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < ((t₀.size + t₁.size) + t₂.size) + 1)
-              $ eq.subst (nat.add_assoc t₀.size t₁.size t₂.size).symm
-            
-            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < (t₀.size + (t₁.size + t₂.size)) + 1)
-              $ eq.subst (nat.add_assoc t₀'.size (t₁.size + t₂.size) 1).symm
-            
-            $ @id ((t₀'.size + (t₁.size + t₂.size)) + 1 < t₀.size + ((t₁.size + t₂.size) + 1))
-              $ eq.subst (nat.add_assoc t₀.size (t₁.size + t₂.size) 1).symm
-            
-            $ @id (t₀'.size + ((t₁.size + t₂.size) + 1) < t₀.size + ((t₁.size + t₂.size) + 1))
-            $ nat.add_lt_add_right smaller ((t₁.size + t₂.size) + 1)
-            
-      | (term.succ _) (eval_relation.Succ t₀ e₀) :=
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.succ t₀').size < (term.succ t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred term.zero) eval_relation.PredZero :=
-          @id (term.zero.size < (term.pred term.zero).size)
-          $ @id (1 < 2) $ nat.lt.base 1
-      | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) :=
-          @id (t₀.size < (term.pred (term.succ t₀)).size)
-          $ @id (t₀.size < t₀.size + 2)
-          $ @id (t₀.size + 0 < t₀.size + 2) $ nat.lt_add_of_pos_right
-          $ @id (0 < 2) $ nat.zero_lt_one_add 1
-      | (term.pred term.true) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred term.false) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred (term.if_then_else _ _ _)) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred (term.pred _)) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred term.zero) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred (term.succ _)) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.pred (term.iszero _)) (eval_relation.Pred t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.pred t₀').size < (term.pred t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero term.zero) eval_relation.IsZeroZero :=
-          @id (term.true.size < (term.iszero term.zero).size)
-          $ @id (1 < 2) $ nat.lt.base 1
-      | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) :=
-              @id (term.false.size < (term.iszero (term.succ t₀)).size)
-              $ @id (1 < t₀.size + 2) $ nat.succ_lt_succ
-              $ @id (0 < t₀.size + 1) $ nat.zero_lt_succ t₀.size
-      | (term.iszero term.true) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero term.false) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero (term.if_then_else _ _ _)) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero (term.iszero _)) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero term.zero) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero (term.succ _)) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      | (term.iszero (term.pred _)) (eval_relation.IsZero t₀ e₀) := 
-          let t₀' := step t₀ e₀
-            , smaller : t₀'.size < t₀.size := step_size_decression t₀ e₀
-          in @id ((term.iszero t₀').size < (term.iszero t₀).size)
-            $ @id (t₀'.size + 1 < t₀.size + 1)
-            $ nat.succ_lt_succ smaller
-      
-      private def loop
-        : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
-      | t@term.true := λ_, t
-      | t@term.false := λ_, t
-      | t@term.zero := λ_, t
-      | t := λloop,
-          match maybe_eval_relation t with
-          | option.none := t
-          | (option.some (e : eval_relation t)) := loop (step t e) (step_size_decression t e)
-          end
+    def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
+      inv_image.wf (term.size) nat.lt_wf
 
-      def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
-        inv_image.wf (term.size) nat.lt_wf
+    def eval : term → term :=
+      well_founded.fix size_lt_wf loop
 
-      def eval : term → term :=
-        well_founded.fix size_lt_wf loop
-
-    end small_step
-
-  end eval
+  end small_step
 
 end arith
 
@@ -442,6 +438,6 @@ def main : io unit := do
   test_str ← io.fs.read_file "test.f" ff,
   io.put_str_ln $ match parser.run arith.parser.toplevel test_str with
   | (sum.inl err) := to_string err
-  | (sum.inr x) := to_string $ functor.map arith.eval.small_step.eval x
+  | (sum.inr x) := to_string $ functor.map arith.small_step.eval x
   end
 

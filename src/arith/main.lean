@@ -14,50 +14,54 @@ namespace arith
   | succ : term → term
   | pred : term → term
 
-  private def term.repr : term → string
-  | term.true := "true"
-  | term.false := "false"
-  | (term.if_then_else t₀ t₁ t₂) :=
-      "(if " ++ term.repr t₀
-      ++ " then " ++ term.repr t₁
-      ++ " else " ++ term.repr t₂
-      ++ ")"
-  | (term.iszero t) := "(iszero "  ++ term.repr t ++ ")"
-  | (term.zero) := "zero"
-  | (term.succ t) := "(succ " ++ term.repr t ++ ")"
-  | (term.pred t) := "(pred " ++ term.repr t ++ ")"
+  namespace term 
+  
+    private def repr : term → string
+    | true := "true"
+    | false := "false"
+    | (if_then_else t₀ t₁ t₂) :=
+        "(if " ++ repr t₀
+        ++ " then " ++ repr t₁
+        ++ " else " ++ repr t₂
+        ++ ")"
+    | (iszero t) := "(iszero "  ++ repr t ++ ")"
+    | (zero) := "zero"
+    | (succ t) := "(succ " ++ repr t ++ ")"
+    | (pred t) := "(pred " ++ repr t ++ ")"
 
-  instance : has_repr term := ⟨term.repr⟩
+    instance : has_repr term := ⟨repr⟩
 
-  private def term.to_string : term → string
-  | term.true := "true"
-  | term.false := "false"
-  | (term.if_then_else t₀ t₁ t₂) :=
-      "if " ++ term.to_string t₀
-      ++ " then " ++ term.to_string t₁
-      ++ " else " ++ term.to_string t₂
-  | (term.iszero t) := "iszero " ++ term.to_string t
-  | term.zero := "0"
-  | (term.succ t) := "succ " ++ term.to_string t
-  | (term.pred t) := "pred " ++ term.to_string t
+    private def to_string : term → string
+    | true := "true"
+    | false := "false"
+    | (if_then_else t₀ t₁ t₂) :=
+        "if " ++ to_string t₀
+        ++ " then " ++ to_string t₁
+        ++ " else " ++ to_string t₂
+    | (iszero t) := "iszero " ++ to_string t
+    | zero := "0"
+    | (succ t) := "succ " ++ to_string t
+    | (pred t) := "pred " ++ to_string t
 
-  instance : has_to_string term := ⟨term.to_string⟩
+    instance : has_to_string term := ⟨to_string⟩
 
-  def term.size : term → ℕ
-  | (term.if_then_else t₀ t₁ t₂) := (term.size t₀ + term.size t₁ + term.size t₂).succ
-  | (term.iszero t₀) := nat.succ $ term.size t₀
-  | (term.succ t₀) := nat.succ $ term.size t₀
-  | (term.pred t₀) := nat.succ $ term.size t₀
-  | _ := 1
+    def size : term → ℕ
+    | (if_then_else t₀ t₁ t₂) := (size t₀ + size t₁ + size t₂).succ
+    | (iszero t₀) := nat.succ $ size t₀
+    | (succ t₀) := nat.succ $ size t₀
+    | (pred t₀) := nat.succ $ size t₀
+    | _ := 1
 
-  def term.size.pos : ∀(t : term), 0 < t.size
-  | (term.if_then_else t₀ t₁ t₂) := nat.succ_pos (term.size t₀ + term.size t₁ + term.size t₂)
-  | (term.iszero t₀) := nat.succ_pos $ term.size t₀
-  | (term.succ t₀) := nat.succ_pos $ term.size t₀
-  | (term.pred t₀) := nat.succ_pos $ term.size t₀
-  | term.true := nat.succ_pos 0
-  | term.false := nat.succ_pos 0
-  | term.zero := nat.succ_pos 0
+    def size.pos : ∀(t : term), 0 < t.size
+    | (if_then_else t₀ t₁ t₂) := nat.succ_pos (size t₀ + size t₁ + size t₂)
+    | (iszero t₀) := nat.succ_pos $ size t₀
+    | (succ t₀) := nat.succ_pos $ size t₀
+    | (pred t₀) := nat.succ_pos $ size t₀
+    | true := nat.succ_pos 0
+    | false := nat.succ_pos 0
+    | zero := nat.succ_pos 0
+
+  end term
 
   namespace parser
     private def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit

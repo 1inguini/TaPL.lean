@@ -63,6 +63,22 @@ namespace language
 
   end term
 
+  @[derive decidable_eq]
+  inductive type : Type
+  | Nat : type
+  | Bool : type
+  
+  namespace type
+
+    instance : has_repr type := ⟨λt, match t with
+      | type.Nat := "Nat"
+      | type.Bool := "Bool"
+      end⟩
+
+    instance : has_to_string type := ⟨repr⟩
+
+  end type
+
   namespace parser
     private def print_test {α : Type} [has_repr α]: (string ⊕ α) → io unit
     | (sum.inr ok) := io.put_str_ln $ repr ok
@@ -430,6 +446,60 @@ namespace language
     def eval : term → term :=
       well_founded.fix size_lt_wf loop
 
+inductive type_relation : type → term → Type
+    | True : type_relation type.Bool term.true
+    | False : type_relation type.Bool term.false
+    | If {T₁ T₂ : type} {t₀ t₁ t₂ : term}
+      : type_relation type.Bool t₀
+      → T₁ = T₂
+      → type_relation T₁ t₁
+      → type_relation T₂ t₂
+      → type_relation T₁ (term.if_then_else t₀ t₁ t₂)
+    | Zero : type_relation type.Nat term.zero
+    | Succ {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Nat (term.succ t₀)
+    | Pred {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Nat (term.pred t₀)
+    | IsZero {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Bool (term.iszero t₀)
+
+    def maybe_type_relation : ∀(t : term), option Σ(T : type), type_relation T t
+    | term.true := pure ⟨type.Bool, type_relation.True⟩
+    | term.false := pure ⟨type.Bool, type_relation.False⟩
+    | (term.if_then_else t₀ t₁ t₂) := do
+        Ttr₀ <- maybe_type_relation t₀,
+        match Ttr₀ with
+        | ⟨type.Bool, tr₀⟩ := do
+            ⟨T₁, tr₁⟩ <- maybe_type_relation t₁,
+            ⟨T₂, tr₂⟩ <- maybe_type_relation t₂,
+            if ok : T₁ = T₂
+            then pure ⟨T₁, type_relation.If tr₀ ok tr₁ tr₂⟩
+            else option.none
+        | _ := option.none
+        end
+    | term.zero := pure ⟨type.Nat, type_relation.Zero⟩
+    | (term.succ t₀) := do
+        Ttr₀ <- maybe_type_relation t₀,
+        match Ttr₀ with
+        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Nat, type_relation.Succ tr₀⟩
+        | _ := option.none
+        end
+    | (term.pred t₀) := do
+        Ttr₀ <- maybe_type_relation t₀,
+        match Ttr₀ with
+        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Nat, type_relation.Pred tr₀⟩
+        | _ := option.none
+        end
+    | (term.iszero t₀) := do
+        Ttr₀ <- maybe_type_relation t₀,
+        match Ttr₀ with
+        | ⟨type.Nat, tr₀⟩ := pure ⟨type.Bool, type_relation.IsZero tr₀⟩
+        | _ := option.none
+        end
+
+      def typecheck (t : term) : option type := 
+        match maybe_type_relation t with
+        | option.none := option.none
+        | option.some ⟨T, _⟩ := T
+        end
+
   end small_step
 
 end language
@@ -440,7 +510,7 @@ def eval_file (filename : string) : io unit := do
   match parser.run language.parser.toplevel test_str with
   | (sum.inl err) := io.print err
   | (sum.inr ts) := io.print $
-      functor.map language.small_step.eval ts
+      functor.map (λt, (language.small_step.typecheck t, language.small_step.eval t)) ts
   end
 
 def main : io unit := do

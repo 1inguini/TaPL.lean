@@ -5,6 +5,7 @@ This code does not have one-to-one correspondence to the [[https://www.cis.upenn
 
 ** Progress
 - [X] arith
+- [X] tyarith
 - [ ] bot
 - [ ] equirec
 - [ ] fomega
@@ -28,7 +29,6 @@ This code does not have one-to-one correspondence to the [[https://www.cis.upenn
 - [ ] recon
 - [ ] reconbase
 - [ ] simplebool
-- [ ] tyarith
 - [ ] untyped
 
 ** License

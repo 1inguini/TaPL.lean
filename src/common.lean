@@ -45,6 +45,14 @@ namespace parser
   def word.succ : parser unit := symbol "succ"
   def word.pred : parser unit := symbol "pred"
   def word.iszero : parser unit := symbol "iszero"
+  def word.lambda : parser unit := symbol "lambda" <|> symbol "λ"
+
+  -- Identifier, alphabet followed by alphanum or underscore
+  -- Be careful, it doesn't ignore keywords!
+  def identifier : parser string := lexeme $ do
+    head ← parser.sat char.is_alpha,
+    ⟨rest⟩ ← parser.many_char $ parser.sat (λc, char.is_alphanum c ∨ c = '_'),
+    pure ⟨head :: rest⟩ 
 
   -- Symbols
   def underscore : parser unit := symbol "_"

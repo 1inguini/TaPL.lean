@@ -67,8 +67,8 @@ namespace arith
 
     -- Constant
     def true : parser term := term.true <$ parser.word.true
-    def false : parser term := term.false <$ parser.word.true
-    def zero : parser term := term.zero <$ parser.word.true
+    def false : parser term := term.false <$ parser.word.false
+    def zero : parser term := term.zero <$ parser.symbol "0"
 
     -- Unary
     private def unary

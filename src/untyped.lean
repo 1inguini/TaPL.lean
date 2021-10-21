@@ -6,7 +6,7 @@ namespace untyped
   -- Type representing term of the language
   inductive term : ℕ → Type
   -- Variable, represented by de Bruijn index
-  | var {n : ℕ} (index : fin n) : term n
+  | var {n : ℕ} (index : fin (nat.succ n)) : term (nat.succ n)
   -- Abstraction, a lambda
   | abs {n : ℕ} (body : term (nat.succ n)) : term n
   -- Function application

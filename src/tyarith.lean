@@ -2,6 +2,7 @@ import common
 
 namespace tyarith
 
+  -- Type representing term of the language
   @[derive decidable_eq]
   inductive term : Type
   | true : term
@@ -50,6 +51,7 @@ namespace tyarith
     | (pred t₀) := nat.succ $ size t₀
     | _ := 1
 
+    -- term.size is always positive
     def size.pos : ∀(t : term), 0 < t.size
     | (if_then_else t₀ t₁ t₂) := nat.succ_pos (size t₀ + size t₁ + size t₂)
     | (iszero t₀) := nat.succ_pos $ size t₀
@@ -61,6 +63,7 @@ namespace tyarith
 
   end term
 
+  -- Type representing type of the language
   @[derive decidable_eq]
   inductive type : Type
   | Nat : type
@@ -102,6 +105,7 @@ namespace tyarith
       <*> (parser.symbol "then" *> inside)
       <*> (parser.symbol "else" *> inside)
 
+    -- Parser for the language
     def toplevel : parser (list term) := parser.terms $ λterm,
         true
         <|> false
@@ -116,6 +120,7 @@ namespace tyarith
 
   namespace small_step
 
+    -- Evaluation relations as a Type
     inductive eval_relation : term → Type
     | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
     | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂)
@@ -129,6 +134,7 @@ namespace tyarith
     | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
     | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
 
+    -- Deduce a evaluation relation from a term
     def maybe_eval_relation : ∀(t : term), option (eval_relation t)
     | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
     | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
@@ -154,7 +160,7 @@ namespace tyarith
     def false_is_normal_form (e : eval_relation term.false) : false := by cases e
     def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
 
-    -- term may be evaluated or already normal form before evaluation step
+    -- Evaluate term with corresponding evaluation relation
     def step : ∀(t : term), eval_relation t → term
     | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁
     | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
@@ -168,6 +174,8 @@ namespace tyarith
     | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false
     | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
 
+    -- A proof that term.size of the term decreases after step is applied to it
+    -- Lots of obvious pattern matches are needed
     def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
     | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
         let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
@@ -334,7 +342,8 @@ namespace tyarith
         in @id ((term.iszero t₀').size < (term.iszero t₀).size)
           $ @id (t₀'.size + 1 < t₀.size + 1)
           $ nat.succ_lt_succ smaller
-
+    
+    -- Function to be passed to well_founded.fix
     private def loop
       : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
     | t@term.true := λ_, t
@@ -346,12 +355,14 @@ namespace tyarith
         | (option.some (e : eval_relation t)) := loop (step t e) (step_size_decression t e)
         end
 
+    -- Proof to be passed to well_founded.fix
     def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
       inv_image.wf (term.size) nat.lt_wf
 
     def eval : term → term :=
       well_founded.fix size_lt_wf loop
 
+  -- Typing relations as a Type
   inductive type_relation : type → term → Type
     | True : type_relation type.Bool term.true
     | False : type_relation type.Bool term.false
@@ -366,6 +377,7 @@ namespace tyarith
     | Pred {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Nat (term.pred t₀)
     | IsZero {t₀ : term} : type_relation type.Nat t₀ → type_relation type.Bool (term.iszero t₀)
 
+    -- Deduce a type and typing relation from a term
     def maybe_type_relation : ∀(t : term), option Σ(T : type), type_relation T t
     | term.true := pure ⟨type.Bool, type_relation.True⟩
     | term.false := pure ⟨type.Bool, type_relation.False⟩
@@ -408,6 +420,7 @@ namespace tyarith
 
   end small_step
 
+  -- Read, Evaluate, Print
   def main (src : char_buffer) : io unit := do
     match parser.run parser.toplevel src with
     | (sum.inl err) := io.put_str_ln err

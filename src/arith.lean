@@ -2,6 +2,7 @@ import common
 
 namespace arith
 
+  -- Type representing term of the language
   @[derive decidable_eq]
   inductive term : Type
   | true : term
@@ -50,6 +51,7 @@ namespace arith
     | (pred t₀) := nat.succ $ size t₀
     | _ := 1
 
+    -- term.size is always positive
     def size.pos : ∀(t : term), 0 < t.size
     | (if_then_else t₀ t₁ t₂) := nat.succ_pos (size t₀ + size t₁ + size t₂)
     | (iszero t₀) := nat.succ_pos $ size t₀
@@ -86,6 +88,7 @@ namespace arith
       <*> (parser.symbol "then" *> inside)
       <*> (parser.symbol "else" *> inside)
 
+    -- Parser for the language
     def toplevel : parser (list term) := parser.terms $ λterm,
       true
       <|> false
@@ -100,19 +103,21 @@ namespace arith
 
   namespace small_step
 
+    -- Evaluation relations as a Type
     inductive eval_relation : term → Type
     | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
     | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂) 
     | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
     | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
     | PredZero : eval_relation (term.pred term.zero)
-    -- I decided not to reject non-numeric term1inguini
+    -- I decided not to reject non-numeric term
     | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
     | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
     | IsZeroZero : eval_relation (term.iszero term.zero)
     | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
     | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
 
+    -- Deduce a evaluation relation from a term
     def maybe_eval_relation : ∀(t : term), option (eval_relation t)
     | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
     | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
@@ -138,7 +143,7 @@ namespace arith
     def false_is_normal_form (e : eval_relation term.false) : false := by cases e
     def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
 
-    -- term may be evaluated or already normal form before evaluation step
+    -- Evaluate term with corresponding evaluation relation
     def step : ∀(t : term), eval_relation t → term
     | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁ 
     | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
@@ -152,6 +157,8 @@ namespace arith
     | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false 
     | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
 
+    -- A proof that term.size of the term decreases after step is applied to it
+    -- Lots of obvious pattern matches are needed
     def step_size_decression : ∀(t : term) (e : eval_relation t), (step t e).size < t.size
     | (term.if_then_else term.true _ _) (eval_relation.IfTrue t₁ t₂) :=
         let split : t₁.size + (1 + t₂.size + 1) = 1 + t₁.size + t₂.size + 1 :=
@@ -319,6 +326,7 @@ namespace arith
           $ @id (t₀'.size + 1 < t₀.size + 1)
           $ nat.succ_lt_succ smaller
     
+    -- Function to be passed to well_founded.fix
     private def loop
       : ∀(t : term) (loop : ∀(smaller : term), smaller.size < t.size → term), term
     | t@term.true := λ_, t
@@ -330,6 +338,7 @@ namespace arith
         | (option.some (e : eval_relation t)) := loop (step t e) (step_size_decression t e)
         end
 
+    -- Proof to be passed to well_founded.fix
     def size_lt_wf : well_founded (λ(t₀ t₁ : term), t₀.size < t₁.size) :=
       inv_image.wf (term.size) nat.lt_wf
 
@@ -338,6 +347,7 @@ namespace arith
 
   end small_step
 
+  -- Read, Evaluate, Print
   def main (src : char_buffer) : io unit := do
     match parser.run parser.toplevel src with
     | (sum.inl err) := io.print_ln err

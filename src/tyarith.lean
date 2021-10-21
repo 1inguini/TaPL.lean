@@ -83,38 +83,36 @@ namespace tyarith
   namespace parser
 
     -- Constant
-    private def const (t : term) : parser term := t <$ parser.symbol (to_string t)
-    def true : parser term := const term.true
-    def false : parser term := const term.false
-    def zero : parser term := const term.zero
+    def true : parser term := term.true <$ parser.word.true
+    def false : parser term := term.false <$ parser.word.true
+    def zero : parser term := term.zero <$ parser.word.true
 
     -- Unary
     private def unary
-      (symbol_def : string) (mk : term -> term) (inside : parser term)
-      : parser term := do
-      parser.symbol symbol_def,
-      mk <$> inside
-    def succ : parser term -> parser term := unary "succ" term.succ
-    def pred : parser term -> parser term := unary "pred" term.pred
-    def iszero : parser term -> parser term := unary "iszero" term.iszero
+      (symbol : parser unit) (mk : term -> term) (inside : parser term)
+      : parser term :=
+      mk <$> (symbol *> inside)
+    def succ : parser term -> parser term := unary parser.word.succ term.succ
+    def pred : parser term -> parser term := unary parser.word.pred term.pred
+    def iszero : parser term -> parser term := unary parser.word.iszero term.iszero
 
     -- if-then-else
     def if_then_else (inside : parser term) : parser term :=
       term.if_then_else
-      <$> (parser.symbol "if" *> inside)
-      <*> (parser.symbol "then" *> inside)
-      <*> (parser.symbol "else" *> inside)
+      <$> (parser.word.if *> inside)
+      <*> (parser.word.then *> inside)
+      <*> (parser.word.else *> inside)
 
     -- Parser for the language
     def toplevel : parser (list term) := parser.terms $ λterm,
-        true
-        <|> false
-        <|> if_then_else term
-        <|> zero
-        <|> succ term
-        <|> pred term
-        <|> iszero term
-        <|> parser.bracket.paren term
+      true
+      <|> false
+      <|> if_then_else term
+      <|> zero
+      <|> succ term
+      <|> pred term
+      <|> iszero term
+      <|> parser.bracket.paren term
 
   end parser
 
@@ -424,7 +422,7 @@ namespace tyarith
   def main (src : char_buffer) : io unit := do
     match parser.run parser.toplevel src with
     | (sum.inl err) := io.put_str_ln err
-    | (sum.inr ts) := io.print $
+    | (sum.inr ts) := io.print_ln $
         functor.map (λt, (small_step.typecheck t, small_step.eval t)) ts
     end
 

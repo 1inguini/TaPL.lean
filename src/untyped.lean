@@ -6,9 +6,9 @@ namespace untyped
   -- Type representing term of the language
   inductive term : ℕ → Type
   -- Variable, represented by de Bruijn index
-  | var {n : ℕ} (index : fin (nat.succ n)) : term (nat.succ n)
+  | var {n : ℕ} (index : fin (n + 1)) : term (n + 1)
   -- Abstraction, a lambda
-  | abs {n : ℕ} (body : term (nat.succ n)) : term n
+  | abs {n : ℕ} (body : term (n + 1)) : term n
   -- Function application
   | app {n : ℕ} : term n → term n → term n
 
@@ -28,10 +28,10 @@ namespace untyped
 
     instance {n : ℕ} : has_to_string (term n) := ⟨to_string⟩
 
-    def size {n : ℕ} : term n → ℕ
+    def size {n : ℕ} : term n → ℕ := sorry
 
     -- term.size is always positive
-    def size.pos {n : ℕ} : ∀(t : term n), 0 < t.size
+    def size.pos {n : ℕ} : ∀(t : term n), 0 < t.size := sorry
 
   end term
 
@@ -57,6 +57,40 @@ namespace untyped
 
   end named_term
 
+  namespace naming
+  
+    -- Naming context
+    def naming_context (n : ℕ) : Type := array n string
+
+    -- Search array from the end
+    private def rev_find {α : Type} (p : α → Prop) [decidable_pred p] {n : ℕ} (a : array (n + 1) α)
+      : option (fin (n + 1)) :=
+      a.rev_iterate option.none $ λi x acc,
+        match acc with
+        | option.none := do guard $ p x, pure $ 0 - 1 - i
+        | result := result
+        end
+
+    -- Convert named_term to term with givin naming context
+    def removenames
+      : ∀{n : ℕ}, named_term → reader (naming_context n) (option $ term n)
+    | (_ + 1) (named_term.var varname) := do
+        Γ ← read,
+        pure $ do
+          index ← rev_find (eq varname) Γ,
+          pure $ term.var $ index
+    | 0 (named_term.var _) := pure option.none
+    | _ (named_term.abs varname body) := do
+        Γ ← read,
+        pure $ functor.map term.abs $
+          (removenames body).run $ Γ.push_back varname
+    | _ (named_term.app nt₀ nt₁) := do
+          t₀ ← removenames nt₀,
+          t₁ ← removenames nt₁,
+          pure $ term.app <$> t₀ <*> t₁
+
+  end naming
+
   namespace parser
 
     private def var : parser named_term := named_term.var <$> parser.identifier
@@ -65,110 +99,67 @@ namespace untyped
       v ← parser.identifier,
       parser.dot,
       named_term.abs v <$> term
-    private def app (term : parser named_term) : parser named_term :=
-      named_term.app <$> term <*> term
+    private def app (term : parser named_term) : parser named_term := parser.fix $ λapp, do
+      t :: ts ← parser.many1 $ abs app <|> var,
+      pure $ list.foldl (named_term.app) t ts
+
+    private def term : parser named_term := app $ abs
 
     -- Parser for the language, before assigning de Bruijn index
-    private def named_term_toplevel : parser (list named_term) := parser.terms $ λterm,
-      abs term
+    def named_term_toplevel : parser (list named_term) := parser.terms $ λterm,
+      parser.bracket.paren term
       <|> app term
-      <|> var
-      <|> parser.bracket.paren term
+      -- <|> parser.decorate_error "Application" (app term)
+      -- <|> parser.decorate_error "Abstraction" (abs term)
+      -- <|> parser.decorate_error "Variable" var
+
+    def toplevel : parser (list (option $ term 0)) := do
+      nts ← named_term_toplevel,
+      pure $ (λnt, (naming.removenames nt).run array.nil) <$> nts
 
   end parser
 
-  namespace naming
+  def shift_succ : ∀{n : ℕ}, fin n → term n → term (n + 1)
+  | _ c t@(term.var k) := term.var (if k < c then ⟨k.val, k.property.step⟩ else k.succ)
+  | _ c (term.abs t₀) := term.abs $ shift_succ c.succ t₀
+  | _ c (term.app t₀ t₁) := term.app (shift_succ c t₀) (shift_succ c t₀)
+
+  -- def shift_pred : ∀{n : ℕ} (c : fin (n + 1)), term (n + 1) → term n
+  -- | n c (term.var k) := term.var $
+  --     if pk : k ≠ 0 then k.pred pk + (if k < c then 1 else 0)
+  --     else 0
+  -- | _ c (term.abs t₀) := term.abs $ shift_pred c.succ t₀
+  -- | _ c (term.app t₀ t₁) := term.app (shift_pred c t₀) (shift_pred c t₀)
   
-    -- Naming context
-    def naming_context (n : ℕ) : Type := array n string
-
-    -- Search array from the end
-    private def rev_find {α : Type} (p : α → Prop) [decidable_pred p] {n : ℕ} (a : array n.succ α)
-      : option (fin n.succ) :=
-      a.rev_iterate option.none $ λi x acc,
-        match acc with
-        | option.none := do guard $ p x, pure $ 0 - 1 - i
-        | result := result
-        end
-
-    private def removenames_internal
-      : ∀{n : ℕ}, named_term → reader (naming_context n) (option $ term n)
-    | (nat.succ _) (named_term.var varname) := do
-        ctx ← read,
-        pure $ do
-          index ← rev_find (eq varname) ctx,
-          pure $ term.var $ index
-    | 0 (named_term.var _) := pure option.none
-    | _ (named_term.abs varname body) := do
-        ctx ← read,
-        pure $ functor.map term.abs $
-          (removenames_internal body).run $ ctx.push_back varname
-    | _ (named_term.app i₀ i₁) := do
-          t₀ ← removenames_internal i₀,
-          t₁ ← removenames_internal i₁,
-          pure $ term.app <$> t₀ <*> t₁
-
-    -- Convert named_term to term with givin naming context
-    def removenames {n : ℕ} (ctx : naming_context n) (i : named_term) : option (term n) :=
-      (removenames_internal i).run ctx
-
-  end naming
-
+  def β_reduction₀ : term 0 → term 1 → term 0
+  | s t@(term.var k) := if j = k then s else t
+  | s t@(term.abs body) := term.abs $ β_reduction j.succ (shift_succ 0 s) body
+  | s (term.app t₀ t₁) := term.app (β_reduction j s t₀) (β_reduction j s t₁)
+  
   namespace small_step
 
     -- Evaluation relations as a Type
-    inductive eval_relation : term → Type
-    | IfTrue (t₁ t₂ : term) : eval_relation (term.if_then_else term.true t₁ t₂)
-    | IfFalse (t₁ t₂ : term) : eval_relation (term.if_then_else term.false t₁ t₂)
-    | If (t₀ t₁ t₂ : term) : eval_relation t₀ → eval_relation (term.if_then_else t₀ t₁ t₂)
-    | Succ (t₀ : term) : eval_relation t₀ → eval_relation (term.succ t₀)
-    | PredZero : eval_relation (term.pred term.zero)
-    -- I decided not to reject non-numeric term
-    | PredSucc (t₀ : term) : eval_relation (term.pred (term.succ t₀))
-    | Pred (t₀ : term) : eval_relation t₀ → eval_relation (term.pred t₀)
-    | IsZeroZero : eval_relation (term.iszero term.zero)
-    | IsZeroSucc (t₀ : term) : eval_relation (term.iszero (term.succ t₀))
-    | IsZero (t₀ : term) : eval_relation t₀ → eval_relation (term.iszero t₀)
+    inductive eval_relation : ∀{n : ℕ}, term n → Type
+    | App1 {n : ℕ} {t₀ t₁ : term n}
+      : eval_relation t₀ → eval_relation (term.app t₀ t₁)
+    | App2 {n : ℕ} {body₀ : term (n + 1)} {t₁ : term n} 
+      : eval_relation t₁ → eval_relation (term.app (term.abs body₀) t₁)
+    | AppAbs {n : ℕ} {body₀ body₁ : term (n + 1)}
+      : eval_relation (term.app (term.abs body₀) (term.abs body₁))
 
     -- Deduce a evaluation relation from a term
-    def maybe_eval_relation : ∀(t : term), option (eval_relation t)
-    | (term.if_then_else term.true t₁ t₂) := pure (eval_relation.IfTrue t₁ t₂)
-    | (term.if_then_else term.false t₁ t₂) := pure (eval_relation.IfFalse t₁ t₂)
-    | (term.if_then_else t₀ t₁ t₂) := do
-        e₀ ← maybe_eval_relation t₀,
-        pure (eval_relation.If t₀ t₁ t₂ e₀)
-    | (term.succ t₀) := do
-        e₀ ← maybe_eval_relation t₀,
-        pure (eval_relation.Succ t₀ e₀)
-    | (term.pred term.zero) := eval_relation.PredZero
-    | (term.pred (term.succ t₀)) := pure (eval_relation.PredSucc t₀)
-    | (term.pred t₀) := do
-        e₀ ← maybe_eval_relation t₀,
-        pure (eval_relation.Pred t₀ e₀)
-    | (term.iszero term.zero) := pure eval_relation.IsZeroZero
-    | (term.iszero (term.succ t₀)) := pure (eval_relation.IsZeroSucc t₀)
-    | (term.iszero t₀) := do
-        e₀ ← maybe_eval_relation t₀,
-        pure (eval_relation.IsZero t₀ e₀)
-    | _ := option.none
-
-    def true_is_normal_form (e : eval_relation term.true) : false := by cases e
-    def false_is_normal_form (e : eval_relation term.false) : false := by cases e
-    def zero_is_normal_form (e : eval_relation term.zero) : false := by cases e
+    def mk_eval_relation : ∀(t : term 0), option $ eval_relation t
+    | (term.app t₀@(term.app _ _) t₁) := eval_relation.App1 <$> mk_eval_relation t₀
+    | (term.app (term.abs _) t@(term.app _ _)) := eval_relation.App2 <$> mk_eval_relation t
+    | (term.app (term.abs _) (term.abs _)) := pure eval_relation.AppAbs
+    | (term.abs _) := option.none
 
     -- Evaluate term with corresponding evaluation relation
-    def step : ∀(t : term), eval_relation t → term
-    | (term.if_then_else _ _ _) (eval_relation.IfTrue t₁ _) := t₁
-    | (term.if_then_else _ _ _) (eval_relation.IfFalse _ t₂) := t₂
-    | (term.if_then_else _ _ _) (eval_relation.If t₀ t₁ t₂ e₀) :=
-        term.if_then_else (step t₀ e₀) t₁ t₂
-    | (term.succ _) (eval_relation.Succ t₀ e₀) := term.succ (step t₀ e₀)
-    | (term.pred term.zero) eval_relation.PredZero := term.zero
-    | (term.pred (term.succ _)) (eval_relation.PredSucc t₀) := t₀
-    | (term.pred _) (eval_relation.Pred t₀ e₀) := term.pred (step t₀ e₀)
-    | (term.iszero term.zero) eval_relation.IsZeroZero := term.true
-    | (term.iszero (term.succ _)) (eval_relation.IsZeroSucc t₀) := term.false
-    | (term.iszero _) (eval_relation.IsZero t₀ e₀) := term.iszero (step t₀ e₀)
+    def step : ∀(t : term 0), eval_relation t → term 0
+    | (term.app t₀ t₁) (eval_relation.App1 tr₀) := term.app (step t₀ tr₀) t₁
+    | (term.app v₀ t₁) (eval_relation.App2 tr₁) := term.app v₀ (step t₁ tr₁)
+    | (term.app (term.abs body₀) v₁) (eval_relation.AppAbs) :=
+      β_reduction₀ (shift_succ 0 v₁) body₀
 
     -- A proof that term.size of the term decreases after step is applied to it
     -- Lots of obvious pattern matches are needed
@@ -365,7 +356,7 @@ namespace untyped
     match parser.run parser.toplevel src with
     | (sum.inl err) := io.print_ln err
     | (sum.inr ts) := io.print_ln $
-        functor.map small_step.eval ts
+        /- functor.map small_step.eval -/ ts
     end
 
 end untyped

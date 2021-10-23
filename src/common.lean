@@ -32,8 +32,7 @@ namespace parser
 
   -- Ignore trailing whitespaces
   def lexeme {α : Type} : parser α → parser α := (<* spaces)
-  def symbol : string → parser unit :=
-    lexeme ∘ parser.str
+  def symbol : string → parser unit := lexeme ∘ parser.str
 
   -- Keywords
   def word.import : parser unit := symbol "import"

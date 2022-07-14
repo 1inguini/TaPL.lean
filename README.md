@@ -1,22 +1,22 @@
 # TaPL.lean
 
-Implementing and learning /[[https://www.cis.upenn.edu/~bcpierce/tapl/checkers/arith.tar.gz][Types and Programming Languages]]/ in [[https://github.com/leanprover-community/lean][Lean 3]]
+Implementing and learning _[Types and Programming Languages](https://www.cis.upenn.edu/~bcpierce/tapl/checkers/arith.tar.gz)_ in [Lean 3](https://github.com/leanprover-community/lean)
 
-This code does not have one-to-one correspondence to the [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers][original implentation]]
+This code does not have one-to-one correspondence to the [original implentation](https://www.cis.upenn.edu/~bcpierce/tapl/checkers)
 
 ## Run
 
-~lean --run src/main.lean LANGUAGE_NAME~ at project root
+`lean --run src/main.lean LANGUAGE_NAME` at project root
 
 ## Progress
 
 - Chapter 1~4
-  - [X] arith
+  - [x] arith
 - Chapter 5~7
   - [ ] untyped
   - [ ] fulluntyped
 - Chapter 8
-  - [X] tyarith
+  - [x] tyarith
 - Chapte 9~10
   - [ ] simplebool
   - [ ] fullsimple
@@ -43,6 +43,6 @@ This code does not have one-to-one correspondence to the [[https://www.cis.upenn
 
 ## License
 
-The test.f file in each directories under [[examples][examples]] is copied from the [[https://www.cis.upenn.edu/~bcpierce/tapl/checkers][original implentation]], and their copyright belongs to [[ <https://www.cis.upenn.edu/~bcpierce>][Benjamin C. Pierce]] as far as I know (I couldn't find the copyright notice of them).
+The test.f file in each directories under [examples](./examples) is copied from the [original implentation](https://www.cis.upenn.edu/~bcpierce/tapl/checkers), and their copyright belongs to [Benjamin C. Pierce](https://www.cis.upenn.edu/~bcpierce) as far as I know (I couldn't find the copyright notice of them).
 
-Everything else (including examples/#/test_ex.f) is licensed under the [[https://opensource.org/licenses/BSD-3-Clause][BSD3]] License - see the [[LICENSE.txt][LICENSE.txt]] file for details
+Everything else (including examples/#/test_ex.f) is licensed under the [BSD3](https://opensource.org/licenses/BSD-3-Clause) License - see the [LICENSE.txt](./LICENSE.txt) file for details

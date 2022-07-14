@@ -33,6 +33,15 @@ namespace untyped
     -- term.size is always positive
     def size.pos {n : ℕ} : ∀(t : term n), 0 < t.size := sorry
 
+    inductive no_var : ∀{n : ℕ} (k : fin n), term n → Prop
+    | var {n : ℕ} {k l : fin (n + 1)} (h : k ≠ l) : no_var k (term.var l)
+    | abs {n : ℕ} {k : fin n} {t : term (n + 1)}
+      : no_var ⟨k.val, k.property.step⟩ t → no_var k (term.abs t)
+    | app {n : ℕ} {k : fin n} {t₀ t₁ : term n}
+      : no_var k t₀ → no_var k t₁ → no_var k (term.app t₀ t₁)
+
+
+
   end term
 
   -- Term, before assigning de Bruijn index
@@ -58,7 +67,7 @@ namespace untyped
   end named_term
 
   namespace naming
-  
+
     -- Naming context
     def naming_context (n : ℕ) : Type := array n string
 
@@ -103,7 +112,7 @@ namespace untyped
       t :: ts ← parser.many1 $ abs app <|> var,
       pure $ list.foldl (named_term.app) t ts
 
-    private def term : parser named_term := app $ abs
+    -- private def term : parser named_term := app $ abs
 
     -- Parser for the language, before assigning de Bruijn index
     def named_term_toplevel : parser (list named_term) := parser.terms $ λterm,
@@ -119,30 +128,51 @@ namespace untyped
 
   end parser
 
-  def shift_succ : ∀{n : ℕ}, fin n → term n → term (n + 1)
-  | _ c t@(term.var k) := term.var (if k < c then ⟨k.val, k.property.step⟩ else k.succ)
-  | _ c (term.abs t₀) := term.abs $ shift_succ c.succ t₀
-  | _ c (term.app t₀ t₁) := term.app (shift_succ c t₀) (shift_succ c t₀)
 
-  -- def shift_pred : ∀{n : ℕ} (c : fin (n + 1)), term (n + 1) → term n
-  -- | n c (term.var k) := term.var $
-  --     if pk : k ≠ 0 then k.pred pk + (if k < c then 1 else 0)
-  --     else 0
-  -- | _ c (term.abs t₀) := term.abs $ shift_pred c.succ t₀
-  -- | _ c (term.app t₀ t₁) := term.app (shift_pred c t₀) (shift_pred c t₀)
-  
-  def β_reduction₀ : term 0 → term 1 → term 0
-  | s t@(term.var k) := if j = k then s else t
-  | s t@(term.abs body) := term.abs $ β_reduction j.succ (shift_succ 0 s) body
-  | s (term.app t₀ t₁) := term.app (β_reduction j s t₀) (β_reduction j s t₁)
-  
+  def shift_succ : ∀{n : ℕ}, term n → fin n → term (n + 1)
+  | _ (term.var k) c := term.var (if k < c then ⟨k.val, k.property.step⟩ else k.succ)
+  | _ (term.abs t₀) c := term.abs $ shift_succ t₀ c.succ
+  | _ (term.app t₀ t₁) c := term.app (shift_succ t₀ c) (shift_succ t₀ c)
+
+  inductive no_var_zero : ∀{n : ℕ}, term (n + 1) → Type
+  | var {n : ℕ} {k : fin (n + 1)} : no_var_zero (term.var k.succ)
+  | abs {n : ℕ} {t : term (n + 1)}
+    : no_var_zero t → no_var_zero (term.abs (shift_succ t 0))
+  | app {n : ℕ} (t₀ t₁ : term (n + 1))
+    : no_var_zero t₀ → no_var_zero t₁ → no_var_zero (term.app t₀ t₁)
+
+
+  def shift_pred : ∀{n : ℕ} (t : term (n + 1)), term.no_var 0 t → fin (n + 1) → term n
+  | (n + 1) (term.var k) (term.no_var.var k_neq_0) := λc, term.var $
+      if k_lt_c : k.val < c.val
+      then
+        let
+          c1_le_n2 : c.val + 1 ≤ n + 1 + 1 := nat.succ_le_of_lt c.property,
+          c_le_n1 : c.val ≤ n + 1 := iff.mp (nat.add_le_add_iff_le_right 1 c.val (n + 1)) c1_le_n2,
+          k_lt_n1 : k.val < n + 1 :=
+            match nat.eq_or_lt_of_le c_le_n1 with
+            | or.inl (p : c.val = n + 1) := p.subst k_lt_c
+            | or.inr (p : c.val < n + 1) := nat.lt_trans k_lt_c p
+            end
+        in
+        ⟨k.val, k_lt_n1⟩
+      else ⟨k.val.pred, (_ : k.val.pred < n + 1)⟩
+  | 0 (term.var k) := λc, term.abs (term.var 0) -- c = k = 0, but 0 has no predecessor
+  | _ (term.abs t₀) := λc, term.abs $ shift_pred t₀ c.succ
+  | _ (term.app t₀ t₁) := λc, term.app (shift_pred t₀ c) (shift_pred t₀ c)
+
+  def β_reduction : ∀{n : ℕ}, term (n + 1) → fin (n + 1) → term n → term n
+  | _ t@(term.var k) := λj s, if k = j then s else shift_pred t 0
+  | _ t@(term.abs body) := λj s, term.abs $ β_reduction body j.succ (shift_succ s 0)
+  | _ (term.app t₀ t₁) := λj s, term.app (β_reduction t₀ j s) (β_reduction t₁ j s)
+
   namespace small_step
 
     -- Evaluation relations as a Type
     inductive eval_relation : ∀{n : ℕ}, term n → Type
     | App1 {n : ℕ} {t₀ t₁ : term n}
       : eval_relation t₀ → eval_relation (term.app t₀ t₁)
-    | App2 {n : ℕ} {body₀ : term (n + 1)} {t₁ : term n} 
+    | App2 {n : ℕ} {body₀ : term (n + 1)} {t₁ : term n}
       : eval_relation t₁ → eval_relation (term.app (term.abs body₀) t₁)
     | AppAbs {n : ℕ} {body₀ body₁ : term (n + 1)}
       : eval_relation (term.app (term.abs body₀) (term.abs body₁))

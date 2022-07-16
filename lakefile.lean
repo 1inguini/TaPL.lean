@@ -2,14 +2,11 @@ import Lake
 open Lake DSL
 
 package TaPL {
+  srcDir := "src"
 }
 
-lean_lib TaPL {
-  srcDir := "src"
-  roots := #[
-    `Common,
-    `Arith
-  ]
+lean_lib library {
+  roots := #[]
 }
 
 @[defaultTarget]

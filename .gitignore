@@ -3,6 +3,6 @@
 /leanpkg.path
 
 /build
-/lean_package
+/lean_packages
 
 *.code-workspace

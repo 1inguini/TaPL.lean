@@ -5,8 +5,13 @@ package TaPL {
   srcDir := "src"
 }
 
+-- require mathlib from git
+--  "https://github.com/leanprover-community/mathlib4.git"
+
 lean_lib library {
-  roots := #[]
+  roots := #[
+    `Common
+  ]
 }
 
 @[defaultTarget]

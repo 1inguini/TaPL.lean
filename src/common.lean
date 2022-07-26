@@ -90,32 +90,91 @@ private theorem List.cons_get_eq (x : α) (xs : List α) (i : Index xs)
 --     : Concrete Memo α
 --   | andThen {α β : Type} (p : Memo → Concrete Memo α) (q : Memo → Concrete Memo β)
 --     : Concrete Memo (α × β)
-
-inductive Parser (Token : Type) : (α : Type) → Type 1 where
-  | empty {α : Type} : Parser Token α
-  | eps {α : Type} (parsed : List α) : Parser Token α
-  | term (predicate : Token → Prop) [{a : Token} → Decidable (predicate a)]
-    : Parser Token Token
-  | map {α β : Type} (f : α → β) (p : Unit → Parser Token α) : Parser Token β
-  | isNull {α : Type} (p : Unit → Parser Token α) : Parser Token α
-  | or {α : Type} (p : Unit → Parser Token α) (q : Unit → Parser Token α) : Parser Token α
-  | andThen {α β : Type} (p : Unit → Parser Token α) (q : Unit → Parser Token β) : Parser Token (α × β)
-
 namespace Parser
 
-  def derive {α : Type} (c : Token) (p : Parser Token α) : Parser Token α := deriveRec (α := α) p c
-    where
-      deriveRec {α : Type} : Parser Token α → Token → Parser Token α
-        | empty, _ => empty
-        | eps _, _ => empty
-        | term predicate, c => if predicate c then eps [c] else empty
-        | map f p, c => map f <| λx => deriveRec (p x) c
-        | isNull _, _ => empty
-        | Parser.or p q, c => Parser.or (λx => deriveRec (p x) c) (λx => deriveRec (q x) c)
-        | andThen (α := α) (β := β) p q, c =>
-          let p : _ → Parser Token α := (λx => deriveRec (p x) c)
-          let q : _ → Parser Token β := (λx => deriveRec (q x) c)
-          Parser.or (λ_ => andThen p q) (λ_ => andThen (λ_ => isNull p) q)
+  -- https://hackage.haskell.org/package/derp-0.1.6/docs/src/Text-Derp.html#xsR
+  mutual
+    inductive Parser' (Term : Type) : (α : Type) → Type 1 where
+      | mk
+          (recur : Rec Term α)
+          (derive : Term → Parser' Term α)
+          -- (compact : Parser' Term α)
+        : Parser' Term α
+
+    inductive Rec (Term : Type) : (α : Type) → Type 1 where
+      | empty {α : Type} : Rec Term α
+      | eps {α : Type} (parsed : List α) : Rec Term α
+      | term (predicate : Term → Prop) [{a : Term} → Decidable (predicate a)]
+        : Rec Term Term
+      | map {α β : Type} (f : α → β) (p : Unit → Parser' Term α)
+        : Rec Term β
+      | isNull {α : Type} (p : Unit → Parser' Term α) : Rec Term α
+      | or {α : Type} (p : Unit → Parser' Term α) (q : Unit → Parser' Term α)
+        : Rec Term α
+      | andThen {α β : Type} (p : Unit → Parser' Term α) (q : Unit → Parser' Term β)
+        : Rec Term (α × β)
+  end
+
+  def Parser (Term : Type) (α : Type) := Unit → Parser' Term α
+
+  inductive LeUnit (_ : Unit) (_ : Unit) : Prop where
+    | refl : LeUnit () ()
+
+  #check sizeOfWFRel (α := Unit)
+
+
+  def eqAcc : Acc LeUnit () :=
+    Acc.intro () <| λ() refl => eqAcc
+  def eqWf : WellFounded LeUnit :=
+    WellFounded.intro <| λ_ => eqAcc
+
+  mutual
+    noncomputable def parser (p : Rec Term α) : Parser Term α := WellFounded.fix sizeOfWFRel.wf <| λ_ self =>
+      Parser'.mk p (derive (λ_ => self () sorry)) -- (compact <| self () _)
+
+    noncomputable def empty {α : Type} : Parser Term α := parser Rec.empty
+    noncomputable def eps {α : Type} (ls : List α) : Parser Term α := parser (Rec.eps ls)
+    noncomputable def term (predicate : Term → Prop) [{a : Term} → Decidable (predicate a)]
+      : Parser Term Term := parser (Rec.term predicate)
+    noncomputable def isNull {α : Type} (p : Parser Term α) : Parser Term α := parser (Rec.isNull p)
+    noncomputable def map {α β : Type} (f : α → β) (p : Parser Term α) : Parser Term β :=
+      parser (Rec.map f p)
+    noncomputable def or {α : Type} (p : Parser Term α) (q : Parser Term α) : Parser Term α :=
+      parser (Rec.or p q)
+    noncomputable def andThen {α β : Type} (p : Parser Term α) (q : Parser Term β) : Parser Term (α × β) :=
+      parser (Rec.andThen p q)
+
+    noncomputable def derive {α : Type} (p : Parser Term α) (c : Term) : Parser' Term α :=
+      let (Parser'.mk recur _) := p ()
+      deriveRec recur c ()
+
+    noncomputable def deriveRec {α : Type} : (p : Rec Term α) → (c : Term) → Parser Term α
+      | Rec.empty, _ => empty
+      | Rec.eps _, _ => empty
+      | Rec.term predicate, c => if predicate c then Parser.eps [c] else empty
+      | Rec.map f p, c => map f <| derive p c
+      | Rec.isNull _, _ => empty
+      | Rec.or p q, c => parser <| Rec.or (derive p c) (derive q c)
+      | Rec.andThen (α := α) (β := β) p q, c =>
+        let p : Parser Term α := (derive p c)
+        let q : Parser Term β := (derive q c)
+        or (andThen p q) (andThen (isNull p) q)
+      where
+        derive {α : Type} (p : Parser Term α) (c : Term) : Parser Term α := match p () with
+          | Parser'.mk _ derive => λ_ => derive c
+  end
+
+  -- def derive {α : Type} : Parser Token α → Token → Parser Token α
+  --   | empty, _ => empty
+  --   | eps _, _ => empty
+  --   | term predicate, c => if predicate c then eps [c] else empty
+  --   | map f p, c => map f <| λx => derive (p x) c
+  --   | isNull _, _ => empty
+  --   | Parser.or p q, c => Parser.or (λx => derive (p x) c) (λx => derive (q x) c)
+  --   | andThen (α := α) (β := β) p q, c =>
+  --     let p : _ → Parser Token α := (λx => derive (p x) c)
+  --     let q : _ → Parser Token β := (λx => derive (q x) c)
+  --     Parser.or (λ_ => andThen p q) (λ_ => andThen (λ_ => isNull p) q)
 
   -- inductive Derive (toType : {α : Type} → ParserRep α → Type)
   --   : {α : Type} → (rep : ParserRep α) → Type where

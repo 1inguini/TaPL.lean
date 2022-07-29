@@ -1,6 +1,7 @@
 -- Common functions shared across languages, such as parser for keywords
 
 import Std.Data.HashMap
+import Std.Data.HashSet
 open Std
 
 -- def HashSet.singleton {α : Type u} [BEq α] [Hashable α] (a : α) :=
@@ -92,8 +93,8 @@ private theorem List.cons_get_eq (x : α) (xs : List α) (i : Index xs)
 --     : Concrete Memo (α × β)
 namespace Parser
 
-  inductive Tree (Token : Type) where
-    | mk (branches : List <| Tree Token) : Tree Token
+--   inductive Tree (Token : Type) where
+--     | mk (branches : List <| Tree Token) : Tree Token
 
   class Parseable
     (String : Type u) [Append String]
@@ -103,7 +104,8 @@ namespace Parser
     continuous : ∀(string : String) (i : Nat), inBound string i.succ → inBound string i
     empty : String
     snoc : String → Token → String
-    isEmpty : ¬inBound empty 0
+    isEmpty (empty : String) := ¬inBound empty 0
+    emptyIsEmpty : isEmpty empty
     emptyIsIdentity
       : ∀(string : String), empty ++ string = string
 
@@ -111,7 +113,7 @@ namespace Parser
     getToken string index ok := string.get ⟨index, ok⟩
     continuous _ _ ok := Nat.le_of_succ_le ok
     empty := []
-    isEmpty := Nat.not_lt_zero 0
+    emptyIsEmpty := Nat.not_lt_zero 0
     snoc string t := string ++ [t]
     emptyIsIdentity _ := rfl
 
@@ -119,36 +121,111 @@ namespace Parser
     getToken string index ok := string.data.get ⟨index, ok⟩
     continuous _ _ ok:= Nat.le_of_succ_le ok
     empty := ⟨[]⟩
-    isEmpty := Nat.not_lt_zero 0
+    emptyIsEmpty := Nat.not_lt_zero 0
     snoc := String.push
     emptyIsIdentity _ := rfl
 
   open Parseable
   -- def Subscript.term (_ : Subscript Term string) (i : Index string) := string.get i
 
+  inductive SpecificTerm {Term : Type} : (theTerm : Term) → Type where
+    | term {term : Term} : SpecificTerm term
+
   -- inductive NonTerm (Term : Type) {string : List Term} (index : Subscript Term string)
 
   -- inductive IndexedTerm
-  inductive Production (String : Type) {inBound : String → Nat → Prop}
+
+  inductive NonTerm (String : Type) {Term : Type} {inBound : String → Nat → Prop}
     [Append String] [Parseable String Term inBound]
-    (NonTerm : String → Type) : (index : String) → Type where
-    | empty (A : NonTerm empty)
-        (α : List <| NonTerm empty ⊕ Term)
-        (X : NonTerm empty ⊕ Term)
-        (β : List <| NonTerm empty ⊕ Term)
-      : Production String NonTerm empty
+    (sub : String) where
+    | mk (name: _root_.String) : NonTerm String sub
+  deriving DecidableEq, Hashable
 
-  inductive Language
-    (Term : Type) (NonTerm : List Term → Type) (start : NonTerm [])
-    (Production : (index : List Term) → NonTerm index → Type)
-    : (index : List Term) → Type where
-    | empty (productions : (nonTerm : NonTerm []) → Production [] nonTerm)
-      : Language Term NonTerm start Production []
-    | next (pred : Language Term NonTerm start Production init)
-        (productions : (nonTerm : NonTerm init) → Production init nonTerm)
-      : Language Term NonTerm start Production (init ++ [t])
+  inductive Token (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound] where
+    -- | epsilon : Token String
+    | nonTerm : NonTerm String sub → Token String
+    | term : Term → Token String
+  deriving DecidableEq, Hashable
 
-    -- inductive Production (Term : Type) (NonTerm : List Term → Type) : (index : List Term) → Type
+  -- structure Rules (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound] where
+  --   rules : Array <| List <| Token String
+  --   nonEmpty : 0 < rules.size
+
+  def Production (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    : Type :=
+    (sub : String) ×' NonTerm String sub → Array (List <| Token String)
+
+  inductive Nullable (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound] [DecidableEq String] [DecidableEq Term]
+    -- {sub : String}
+    (p : Production String)
+    : (t : List <| Token String) → Prop where
+    | empty : Nullable String p []
+    -- | empty (sub : String) (nonTerm : NonTerm String sub) (rule : List <| Token String)
+    --   (ruleOfNonTerm : rule ∈ p ⟨sub, nonTerm⟩) (isEmpty : rule = [])
+    --   : Nullable String p (Token.nonTerm nonTerm)
+    | refers
+      {sub : String} {nonTerm : NonTerm String sub}
+      (headIsNullable : rules ∈ p ⟨sub, nonTerm⟩)
+      : Nullable String p rules
+      → Nullable String p (snoc rules (Token.nonTerm nonTerm))
+
+  inductive PrunedDerivative  {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound] [DecidableEq String] [DecidableEq Term]
+    (t : Term)
+    : Production String → Type 1 where
+    | succTerm {sub : String} (p : Production String)
+      (rules : ∀(suffix : String) (nonTerm : NonTerm String suffix),
+        (∃(preSub : String), preSub ++ suffix = sub)
+        → ∀(rule : List (Token String)), preRule ++ Token.term t :: rule ∈ p ⟨suffix, nonTerm⟩
+          → Nullable String p preRule
+      )
+      : PrunedDerivative t q
+
+
+  -- def prunedDerivative {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound]
+  --   {sub : String} {t : Term}
+  --   (p : Production sub) : Production (Parseable.snoc sub t) := λ
+  --   | ⟨v, nonTerm⟩ => if ∃(pre : String), pre ++ v = sub then p ⟨v, nonTerm⟩ else _
+
+  -- structure Production (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound] where
+  --   lhs : NonTerm String
+  --   rhs : List <| Token String
+
+  -- #check ({lhs := NonTerm.mk "A" "b", rhs := [Token.nonTerm ⟨"B", "ab"⟩, Token.term 'c'] } : Production String)
+
+
+  -- inductive Production {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound]
+  --   (NonTerm : String → Type)
+  --   : (sub : String) → Type where
+  --   | start (A : NonTerm empty)
+  --       (α : List <| NonTerm empty ⊕ Term)
+  --       (X : NonTerm empty ⊕ Term)
+  --       (β : List <| NonTerm empty ⊕ Term)
+  --     : Production NonTerm empty
+  --   | next
+  --     (_ : ∀(pred : Production NonTerm prev ⊕ Production NonTerm empty), _)
+  --     : Production NonTerm (Parseable.snoc prev t)
+
+  -- inductive Language {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound]
+  --   (NonTerm : String → Type)
+  --   -- (Production : (sub : List Term) → NonTerm sub → Type)
+  --   : (sub : String) → Type where
+  --   | default (start : NonTerm empty) (productions : Production NonTerm empty)
+  --     : Language NonTerm empty
+  --   | derived
+  --       (default : Language NonTerm empty)
+  --       (productions : Production NonTerm z)
+  --       -- (pred : Language String NonTerm start init)
+  --       -- (productions : (nonTerm : NonTerm init) → Production String nonTerm init)
+  --     : Language NonTerm (Parseable.snoc z t)
 
 end Parser
 
@@ -172,6 +249,19 @@ end Parser
 --     : Parser parents (α × β)
 
 namespace Parser
+
+  -- def derive (c : Char)
+  --   : ({α : Type} → P α → P α) → Parser P α → (P : Type → Type 1) ×' Parser P α
+  --   | _, empty => PSigma.mk _ empty
+  --   | _, eps _ => PSigma.mk _ empty
+  --   | _, term predicate => PSigma.mk _ <| if predicate c then eps [c] else empty
+  --   | deriveC, map f p => PSigma.mk _ <| map f <| deriveC p
+  --   -- | _, isNull _ => PSigma.mk _ <| empty
+  --   | deriveC, or p q => PSigma.mk _ <| or (deriveC p) (deriveC q)
+  --   | deriveC, andThen p q => PSigma.mk _ <|
+  --     let q := deriveC q
+  --     or (andThen (deriveC p) q) (andThen (nullOrNot p) q)
+
 
   -- def rebase : (p : Parser (β :: parents) α) → Parser (β :: new) α
   --   -- | up index => λisLt sameType => up ⟨index.val, isLt⟩

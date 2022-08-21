@@ -10,7 +10,8 @@ package TaPL {
 
 lean_lib library {
   roots := #[
-    `Common
+    `Common,
+    `Arith
   ]
 }
 

@@ -1,4 +1,4 @@
--- import arith
+import Arith
 -- import tyarith
 
 def testLanguage (langName : String) (langMain : String → IO Unit) : List System.FilePath → IO Unit

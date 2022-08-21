@@ -98,7 +98,7 @@ namespace Parser
 
   class Parseable
     (String : Type u) [Append String]
-    (Token : outParam <| Type v) (inBound : outParam <| String → Nat → Prop)
+    (Token : Type v) (inBound : outParam <| String → Nat → Prop)
     where
     getToken (string : String) (index : Nat) (ok : inBound string index) : Token
     continuous : ∀(string : String) (i : Nat), inBound string i.succ → inBound string i
@@ -128,6 +128,38 @@ namespace Parser
   open Parseable
   -- def Subscript.term (_ : Subscript Term string) (i : Index string) := string.get i
 
+  structure Sub {String : Type} (Term : Type) {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    (str : String) where
+    start : Nat
+    stop : Nat
+    startInBound : inBound str start
+    stopInBound : inBound str stop
+    deriving Repr, DecidableEq, Hashable
+
+  def Sub.succ {String : Type} (Term : Type) {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    {str : String}
+    : (sub : Sub Term str) → inBound str sub.stop.succ → Sub Term str
+    | {start, stop, startInBound, ..}, stopInBound =>
+      {start, stop := stop.succ, startInBound, stopInBound}
+
+  instance {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    (str : String)
+    : BEq (Sub Term str) where
+    beq
+      | {start := start₀, stop := stop₀, ..}, {start := start₁, stop := stop₁, ..} =>
+        and (BEq.beq start₀ start₁) (BEq.beq stop₀ stop₁)
+
+  instance {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    (str : String)
+    : Hashable (Sub Term str) where
+    hash sub := mixHash
+      (mixHash (hash sub.start) (hash sub.startInBound))
+      (mixHash (hash sub.stop) (hash sub.stopInBound))
+
   inductive SpecificTerm {Term : Type} : (theTerm : Term) → Type where
     | term {term : Term} : SpecificTerm term
 
@@ -135,56 +167,111 @@ namespace Parser
 
   -- inductive IndexedTerm
 
-  inductive NonTerm (String : Type) {Term : Type} {inBound : String → Nat → Prop}
-    [Append String] [Parseable String Term inBound]
-    (sub : String) where
-    | mk (name: _root_.String) : NonTerm String sub
-  deriving DecidableEq, Hashable
+  structure NonTerm {String : Type} {inBound : String → Nat → Prop}
+    (Term : Type) (str : String)
+    [Append String] [Parseable String Term inBound] where
+    name: Nat
+    sub : Sub Term str
+    deriving Repr, DecidableEq
 
-  inductive Token (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+  instance {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    (str : String)
+    : BEq (NonTerm Term str) where
+    beq nt₀ nt₁ := and (BEq.beq nt₀.name nt₁.name) (BEq.beq nt₀.sub nt₁.sub)
+
+  instance {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+    [Append String] [Parseable String Term inBound]
+    (str : String)
+    : Hashable (NonTerm Term str) where
+    hash nt := mixHash (hash nt.name) (hash nt.sub)
+
+  inductive Token {String : Type} {inBound : String → Nat → Prop}
+    (Term : Type) (str : String)
     [Append String] [Parseable String Term inBound] where
     -- | epsilon : Token String
-    | nonTerm : NonTerm String sub → Token String
-    | term : Term → Token String
-  deriving DecidableEq, Hashable
+    | nonTerm {sub : Sub Term str} : NonTerm Term str → Token Term str
+    | term : Term → Token Term str
+    deriving Repr, BEq, DecidableEq, Hashable
 
-  -- structure Rules (String : Type) {Term : Type} {inBound : String → Nat → Prop}
-  --   [Append String] [Parseable String Term inBound] where
-  --   rules : Array <| List <| Token String
-  --   nonEmpty : 0 < rules.size
+  @[reducible] def Rule {String : Type} {inBound : String → Nat → Prop}
+    (Term : Type) (str : String)
+    [Append String] [Parseable String Term inBound] :=
+    List (Token Term str)
 
-  def Production (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+  @[reducible] def Rules {String : Type} {inBound : String → Nat → Prop}
+    (Term : Type) (str : String)
+    [Append String] [Parseable String Term inBound] :=
+    Array (Rule Term str)
+
+  def Productions {String : Type} {inBound : String → Nat → Prop}
+    {Term : Type} {str : String}
     [Append String] [Parseable String Term inBound]
-    : Type :=
-    (sub : String) ×' NonTerm String sub → Array (List <| Token String)
+    (sub : Sub Term str) :=
+    NonTerm Term str → Rules Term str
 
-  inductive Nullable (String : Type) {Term : Type} {inBound : String → Nat → Prop}
-    [Append String] [Parseable String Term inBound] [DecidableEq String] [DecidableEq Term]
-    -- {sub : String}
-    (p : Production String)
-    : (t : List <| Token String) → Prop where
-    | empty : Nullable String p []
-    -- | empty (sub : String) (nonTerm : NonTerm String sub) (rule : List <| Token String)
-    --   (ruleOfNonTerm : rule ∈ p ⟨sub, nonTerm⟩) (isEmpty : rule = [])
-    --   : Nullable String p (Token.nonTerm nonTerm)
-    | refers
-      {sub : String} {nonTerm : NonTerm String sub}
-      (headIsNullable : rules ∈ p ⟨sub, nonTerm⟩)
-      : Nullable String p rules
-      → Nullable String p (snoc rules (Token.nonTerm nonTerm))
+  structure Language {String : Type} {inBound : String → Nat → Prop}
+    {Term : Type} {str : String}
+    [Append String] [Parseable String Term inBound]
+    (sub : Sub Term str) where
+    nonTerms : List <| NonTerm Term str
+    productions : Productions sub
+    start : NonTerm Term str
 
-  inductive PrunedDerivative  {String : Type} {Term : Type} {inBound : String → Nat → Prop}
-    [Append String] [Parseable String Term inBound] [DecidableEq String] [DecidableEq Term]
-    (t : Term)
-    : Production String → Type 1 where
-    | succTerm {sub : String} (p : Production String)
-      (rules : ∀(suffix : String) (nonTerm : NonTerm String suffix),
-        (∃(preSub : String), preSub ++ suffix = sub)
-        → ∀(rule : List (Token String)), preRule ++ Token.term t :: rule ∈ p ⟨suffix, nonTerm⟩
-          → Nullable String p preRule
-      )
-      : PrunedDerivative t q
+  -- def Production (String : Type) {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound]
+  --   : Type :=
+  --   (sub : String) ×' NonTerm String sub → Array (List <| Token String)
 
+  inductive Nullable {String : Type} {inBound : String → Nat → Prop}
+    {Term : Type} {str : String}
+    [Append String] [Parseable String Term inBound]
+    [DecidableEq String] [DecidableEq Term]
+    {sub : Sub Term str}
+    (p : Productions sub)
+    : Rule Term str → Prop where
+    | empty : Nullable p []
+    | headProduces (produces : rule ∈ p nonTerm)
+      : Nullable p rule → Nullable p suffix
+      → Nullable p (Token.nonTerm nonTerm :: suffix)
+
+  def nullable {String : Type} {inBound : String → Nat → Prop}
+    {Term : Type} {str : String}
+    [Append String] [Parseable String Term inBound]
+    [DecidableEq String] [DecidableEq Term]
+    {sub : Sub Term str}
+    (p : Productions sub)
+    : (rule : Rule Term str) → Decidable (Nullable p rule)
+    | [] => isTrue Nullable.empty
+    | Token.nonTerm nt :: rule => sorry
+    | Token.term t :: rule => isFalse <| λh => nomatch h
+
+
+  -- inductive PrunedDerivative  {String : Type} {Term : Type} {inBound : String → Nat → Prop}
+  --   [Append String] [Parseable String Term inBound] [DecidableEq String] [DecidableEq Term]
+  --   (t : Term)
+  --   : Production String → Type 1 where
+  --   | succTerm {sub : String} (p : Production String)
+  --     (rules : ∀(suffix : String) (nonTerm : NonTerm String suffix),
+  --       (∃(preSub : String), preSub ++ suffix = sub)
+  --       → ∀(rule : List (Token String)), preRule ++ Token.term t :: rule ∈ p ⟨suffix, nonTerm⟩
+  --         → Nullable String p preRule
+  --     )
+  --     : PrunedDerivative t q
+
+  def prunedDerivative {String : Type} {inBound : String → Nat → Prop}
+    {Term : Type} {str : String}
+    [Append String] [Parseable String Term inBound]
+    [DecidableEq String] [DecidableEq Term]
+    {sub : Sub Term str}
+    (stopInBound : inBound str sub.stop.succ)
+    : Language sub → Language (sub.succ Term stopInBound)
+    | {nonTerms, productions, start} =>
+      nonTerms.foldl (λl nt =>
+        if nt.sub.start ≤ sub.start ∧ nt.sub.stop = sub.stop
+        then _-- p nt
+        else {nonTerms, productions, start}
+      ) {nonTerms, productions,start}
 
   -- def prunedDerivative {String : Type} {Term : Type} {inBound : String → Nat → Prop}
   --   [Append String] [Parseable String Term inBound]

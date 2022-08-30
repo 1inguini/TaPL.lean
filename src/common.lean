@@ -1,4 +1,4 @@
--- Common functions shared across languages, such as parser for keywords
+-- Common functions shared across languages, such as Parser for keywords
 
 import Std.Data.HashMap
 import Std.Data.HashSet
@@ -81,101 +81,103 @@ def length_map {α β : Type u} (f : α → β) : (xs : List α) → xs.length =
 private theorem List.cons_get_eq (x : α) (xs : List α) (i : Index xs)
   : (x :: xs).get i.succ = xs.get i := rfl
 
-namespace Parser
+-- namespace Parser
 
---   def between (opening : parser unit) (closing : parser unit) {a : Type} (inside : parser a)
---     : parser a := do
---     opening,
---     result ← inside,
---     closing,
+--   @[reducible] def Parser (α : Type) : Type := ReaderT String (StateM Substring) α
+
+--   def between (opening : Parser Unit) (closing : Parser Unit) {α : Type} (inside : Parser α)
+--     : Parser α := do
+--     opening
+--     let result ← inside
+--     closing
 --     pure result
 
---   def comment : parser unit :=
---     let recur_until_end (until_end : parser unit) :=
---         parser.str "*/"
---         <|> ( parser.str "/*" *> until_end
---               <|> unit.star <$ parser.any_char
---             ) *> until_end
---     in parser.str "/*" *> parser.fix recur_until_end
+  -- def comment : Parser unit :=
+  --   let recur_until_end (until_end : Parser Unit) :=
+  --       Parser.str "*/"
+  --       <|> ( Parser.str "/*" *> until_end
+  --             <|> unit.star <$ Parser.any_char
+  --           ) *> until_end
+  --   in Parser.str "/*" *> Parser.fix recur_until_end
 
 --   -- Whitespaces
 --   -- 全角spaceとかについてはとりあえず考えない
---   def spaces : parser unit := parser.many'
---     (comment <|> unit.star <$ parser.one_of [' ', '\n', '\t'])
+--   def spaces : Parser unit := Parser.many'
+--     (comment <|> unit.star <$ Parser.one_of [' ', '\n', '\t'])
 
 --   -- Ignore trailing whitespaces
---   def lexeme {α : Type} : parser α → parser α := (<* spaces)
---   def symbol : string → parser unit := lexeme ∘ parser.str
+--   def lexeme {α : Type} : Parser α → Parser α := (<* spaces)
+--   def symbol : string → Parser unit := lexeme ∘ Parser.str
 
 --   -- Keywords
---   def word.import : parser unit := symbol "import"
---   def word.if : parser unit := symbol "if"
---   def word.then : parser unit := symbol "then"
---   def word.else : parser unit := symbol "else"
---   def word.true : parser unit := symbol "true"
---   def word.false  : parser unit := symbol "false"
---   def word.succ : parser unit := symbol "succ"
---   def word.pred : parser unit := symbol "pred"
---   def word.iszero : parser unit := symbol "iszero"
---   def word.lambda : parser unit := symbol "lambda" <|> symbol "λ"
+--   def word.import : Parser unit := symbol "import"
+--   def word.if : Parser unit := symbol "if"
+--   def word.then : Parser unit := symbol "then"
+--   def word.else : Parser unit := symbol "else"
+--   def word.true : Parser unit := symbol "true"
+--   def word.false  : Parser unit := symbol "false"
+--   def word.succ : Parser unit := symbol "succ"
+--   def word.pred : Parser unit := symbol "pred"
+--   def word.iszero : Parser unit := symbol "iszero"
+--   def word.lambda : Parser unit := symbol "lambda" <|> symbol "λ"
 
 --   -- Identifier, alphabet followed by alphanum or underscore
 --   -- Be careful, it doesn't ignore keywords!
---   def identifier : parser string := lexeme $ do
---     head ← parser.sat char.is_alpha,
---     ⟨rest⟩ ← parser.many_char $ parser.sat (λc, char.is_alphanum c ∨ c = '_'),
+--   def identifier : Parser string := lexeme $ do
+--     head ← Parser.sat char.is_alpha,
+--     ⟨rest⟩ ← Parser.many_char $ Parser.sat (λc, char.is_alphanum c ∨ c = '_'),
 --     pure ⟨head :: rest⟩
 
 --   -- Symbols
---   def underscore : parser unit := symbol "_"
---   def apostrophe : parser unit := symbol "'"
---   def backslash : parser unit := symbol "\\"
---   def bang : parser unit := symbol "!"
---   def hash : parser unit := symbol "#"
---   def dollar : parser unit := symbol "$"
---   def asterisk : parser unit := symbol "*"
---   def bar : parser unit := symbol "|"
---   def dot : parser unit := symbol "."
---   def semicolon : parser unit := symbol ";"
---   def colon : parser unit := symbol ":"
---   def colon2 : parser unit := symbol "::"
---   def eq : parser unit := symbol "="
---   def eq2 : parser unit := symbol "=="
---   def define : parser unit := symbol ":="
---   def lt : parser unit := symbol "<"
---   def gt : parser unit := symbol ">"
+--   def underscore : Parser unit := symbol "_"
+--   def apostrophe : Parser unit := symbol "'"
+--   def backslash : Parser unit := symbol "\\"
+--   def bang : Parser unit := symbol "!"
+--   def hash : Parser unit := symbol "#"
+--   def dollar : Parser unit := symbol "$"
+--   def asterisk : Parser unit := symbol "*"
+--   def bar : Parser unit := symbol "|"
+--   def dot : Parser unit := symbol "."
+--   def semicolon : Parser unit := symbol ";"
+--   def colon : Parser unit := symbol ":"
+--   def colon2 : Parser unit := symbol "::"
+--   def eq : Parser unit := symbol "="
+--   def eq2 : Parser unit := symbol "=="
+--   def define : Parser unit := symbol ":="
+--   def lt : Parser unit := symbol "<"
+--   def gt : Parser unit := symbol ">"
 
 --   namespace arrow
---     def r : parser unit := symbol "->"
---     def l : parser unit := symbol "<-"
---     def double : parser unit := symbol "=>"
---     def double2 : parser unit := symbol "==>"
+--     def r : Parser unit := symbol "->"
+--     def l : Parser unit := symbol "<-"
+--     def double : Parser unit := symbol "=>"
+--     def double2 : Parser unit := symbol "==>"
 --   end arrow
 
 --   namespace bracket
 
---     def paren {a : Type} : parser a → parser a :=
+--     def paren {a : Type} : Parser a → Parser a :=
 --       between (symbol "(") (symbol ")")
 
---     def square {a : Type} : parser a → parser a :=
+--     def square {a : Type} : Parser a → Parser a :=
 --       between (symbol "[") (symbol "]")
 
---     def curly {a : Type} : parser a → parser a :=
+--     def curly {a : Type} : Parser a → Parser a :=
 --       between (symbol "{") (symbol "}")
 
---     def angle {a : Type} : parser a → parser a :=
+--     def angle {a : Type} : Parser a → Parser a :=
 --       between lt gt
 
---     def square_bar {a : Type} : parser a → parser a :=
+--     def square_bar {a : Type} : Parser a → Parser a :=
 --       between (symbol "[|") (symbol "|]")
 
---     def curly_bar {a : Type} : parser a → parser a :=
+--     def curly_bar {a : Type} : Parser a → Parser a :=
 --       between (symbol "{|") (symbol "|}")
 
---     def angle_bar {a : Type} : parser a → parser a :=
+--     def angle_bar {a : Type} : Parser a → Parser a :=
 --       between (symbol "<|") (symbol "|>")
 
 --   end bracket
 
---   def terms {α : Type} (termF : parser α → parser α) : parser (list α) :=
---     spaces *> parser.many1 (parser.fix termF <* semicolon)
+--   def terms {α : Type} (termF : Parser α → Parser α) : Parser (list α) :=
+--     spaces *> Parser.many1 (Parser.fix termF <* semicolon)
